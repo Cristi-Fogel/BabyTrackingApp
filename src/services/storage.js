@@ -1,54 +1,113 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SHEET_URL_KEY = '@sheet_url';
-const LOGS_KEY = '@baby_logs';
-const ACTIVE_SLEEP_KEY = '@active_sleep';
+const STORAGE_KEY = '@baby_track_entries';
+const SHEET_URL_KEY = '@baby_track_sheet_url';
+
+// Link-ul tău de Google Apps Script setat ca fallback/default
+export const DEFAULT_SHEET_URL =
+  'https://script.google.com/macros/s/AKfycbytwNQpRP8H0Pdps832B9rhPEBreWDIN1aMZ7aOxLvjCbLRS63gfj48L4o9MGoP7MEeEw/exec';
+
+export const getStoredSheetUrl = async () => {
+  try {
+    const url = await AsyncStorage.getItem(SHEET_URL_KEY);
+    return url !== null ? url : DEFAULT_SHEET_URL;
+  } catch (e) {
+    console.error('Eroare citire Sheet URL:', e);
+    return DEFAULT_SHEET_URL;
+  }
+};
 
 export const saveSheetUrl = async (url) => {
-  await AsyncStorage.setItem(SHEET_URL_KEY, url);
-};
-
-export const getSheetUrl = async () => {
-  return await AsyncStorage.getItem(SHEET_URL_KEY);
-};
-
-export const saveLog = async (logEntry) => {
   try {
-    // 1. Salvare locală (Offline First)
-    const existing = await AsyncStorage.getItem(LOGS_KEY);
-    const logs = existing ? JSON.parse(existing) : [];
-    const newLogs = [logEntry, ...logs];
-    await AsyncStorage.setItem(LOGS_KEY, JSON.stringify(newLogs));
+    await AsyncStorage.setItem(SHEET_URL_KEY, url);
+  } catch (e) {
+    console.error('Eroare salvare Sheet URL:', e);
+  }
+};
 
-    // 2. Trimitere către Google Sheets
-    const url = await getSheetUrl();
-    if (url) {
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logEntry),
-      }).catch((err) => console.log('Sync offline note:', err));
+export const getLocalEntries = async () => {
+  try {
+    const jsonValue = await AsyncStorage.getItem(STORAGE_KEY);
+    return jsonValue != null ? JSON.parse(jsonValue) : [];
+  } catch (e) {
+    console.error('Eroare citire intrări locale:', e);
+    return [];
+  }
+};
+
+export const saveLocalEntries = async (entries) => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  } catch (e) {
+    console.error('Eroare salvare intrări locale:', e);
+  }
+};
+
+// Preluare date din Google Sheet (GET) cu suport de urmărire redirect
+export const fetchFromSheet = async (sheetUrl) => {
+  const targetUrl = sheetUrl || DEFAULT_SHEET_URL;
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'GET',
+      redirect: 'follow', // OBLIGATORIU pentru Google Apps Script redirects
+    });
+
+    const responseText = await response.text();
+
+    // Verificăm dacă răspunsul este într-adevăr JSON și nu HTML de eroare
+    if (responseText.trim().startsWith('<')) {
+      throw new Error(
+        'Răspunsul primit este o pagină HTML (posibil permisiuni Apps Script incorecte sau login cerut).'
+      );
     }
-    return newLogs;
-  } catch (error) {
-    console.error('Eroare salvare log:', error);
+
+    const data = JSON.parse(responseText);
+    return data;
+  } catch (e) {
+    console.error('Eroare fetch din Sheet:', e);
+    throw e;
   }
 };
 
-export const getLogs = async () => {
-  const existing = await AsyncStorage.getItem(LOGS_KEY);
-  return existing ? JSON.parse(existing) : [];
-};
+// Trimitere date către Google Sheet (POST) - CORECTAT
+export const sendToSheet = async (sheetUrl, items) => {
+  const targetUrl = sheetUrl || DEFAULT_SHEET_URL;
+  try {
+    if (!targetUrl) return false;
 
-export const setActiveSleep = async (sleepData) => {
-  if (sleepData) {
-    await AsyncStorage.setItem(ACTIVE_SLEEP_KEY, JSON.stringify(sleepData));
-  } else {
-    await AsyncStorage.removeItem(ACTIVE_SLEEP_KEY);
+    // Ne asigurăm că trimitem un Array cu obiectele noastre
+    const payload = Array.isArray(items) ? items : [items];
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      redirect: 'follow',
+      body: JSON.stringify(payload),
+    });
+
+    return response.ok;
+  } catch (e) {
+    console.error('Eroare sendToSheet:', e);
+    return false;
   }
 };
 
-export const getActiveSleep = async () => {
-  const data = await AsyncStorage.getItem(ACTIVE_SLEEP_KEY);
-  return data ? JSON.parse(data) : null;
+const BABY_NAME_KEY = '@baby_name';
+
+export const getBabyName = async () => {
+  try {
+    return (await AsyncStorage.getItem(BABY_NAME_KEY)) || 'Bebelușul'; // Valoare implicită
+  } catch (e) {
+    return 'Bebelușul';
+  }
+};
+
+export const saveBabyName = async (name) => {
+  try {
+    await AsyncStorage.setItem(BABY_NAME_KEY, name);
+  } catch (e) {
+    console.error('Eroare la salvarea numelui', e);
+  }
 };
