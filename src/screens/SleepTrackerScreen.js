@@ -1,8 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { getLocalEntries, saveLocalEntries, getStoredSheetUrl, sendToSheet } from '../services/storage';
+import {
+  getLocalEntries,
+  saveLocalEntries,
+  getStoredSheetUrl,
+  sendToSheet,
+} from '../services/storage';
 
 export default function SleepTrackerScreen() {
   const navigation = useNavigation();
@@ -10,6 +23,7 @@ export default function SleepTrackerScreen() {
     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   );
   const [endTime, setEndTime] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleBack = () => {
     if (navigation && navigation.canGoBack && navigation.canGoBack()) {
@@ -20,6 +34,9 @@ export default function SleepTrackerScreen() {
   };
 
   const handleSave = async () => {
+    if (isSubmitting) return; // Prevenim trimiterile multiple
+    setIsSubmitting(true);
+
     try {
       const now = new Date();
 
@@ -28,6 +45,7 @@ export default function SleepTrackerScreen() {
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
+      const nowIsoString = now.toISOString().replace('T', ' ').substring(0, 19);
 
       const cleanStart = startTime.trim() || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const cleanEnd = endTime.trim();
@@ -42,6 +60,7 @@ export default function SleepTrackerScreen() {
         time: cleanStart,
         type: 'sleep',
         value: valueText,
+        fullDateTime: nowIsoString,
       };
 
       // 1. Salvăm local
@@ -58,10 +77,12 @@ export default function SleepTrackerScreen() {
         }
       }
 
+      // Navigăm automat înapoi către HomeScreen
       handleBack();
     } catch (e) {
       console.error('Eroare la salvarea somnului:', e);
       Alert.alert('Eroare', 'Nu s-a putut salva somnul.');
+      setIsSubmitting(false); // Reactivăm butonul doar dacă apare o eroare
     }
   };
 
@@ -89,8 +110,16 @@ export default function SleepTrackerScreen() {
         />
       </View>
 
-      <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>Creează Înregistrare</Text>
+      <TouchableOpacity
+        style={[styles.saveBtn, isSubmitting && styles.saveBtnDisabled]}
+        onPress={handleSave}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator size="small" color="#FFF" />
+        ) : (
+          <Text style={styles.saveBtnText}>Creează Înregistrare</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -103,6 +132,17 @@ const styles = StyleSheet.create({
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 14, color: '#666', marginBottom: 8 },
   input: { backgroundColor: '#FFF', padding: 14, borderRadius: 12, fontSize: 16, color: '#333' },
-  saveBtn: { backgroundColor: '#2980B9', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 20, elevation: 2 },
+  saveBtn: {
+    backgroundColor: '#2980B9',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    elevation: 2,
+  },
+  saveBtnDisabled: {
+    backgroundColor: '#A0A0A0',
+  },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 });

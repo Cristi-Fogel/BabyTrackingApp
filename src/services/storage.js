@@ -1,113 +1,150 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = '@baby_track_entries';
-const SHEET_URL_KEY = '@baby_track_sheet_url';
-
-// Link-ul tău de Google Apps Script setat ca fallback/default
-export const DEFAULT_SHEET_URL =
-  'https://script.google.com/macros/s/AKfycbytwNQpRP8H0Pdps832B9rhPEBreWDIN1aMZ7aOxLvjCbLRS63gfj48L4o9MGoP7MEeEw/exec';
-
-export const getStoredSheetUrl = async () => {
-  try {
-    const url = await AsyncStorage.getItem(SHEET_URL_KEY);
-    return url !== null ? url : DEFAULT_SHEET_URL;
-  } catch (e) {
-    console.error('Eroare citire Sheet URL:', e);
-    return DEFAULT_SHEET_URL;
-  }
+const KEYS = {
+  ENTRIES: '@baby_tracker_entries',
+  SHEET_URL: '@baby_tracker_sheet_url',
+  BABY_NAME: '@baby_tracker_baby_name',
+  DROPS_ENABLED: '@baby_tracker_drops_enabled',
 };
 
-export const saveSheetUrl = async (url) => {
-  try {
-    await AsyncStorage.setItem(SHEET_URL_KEY, url);
-  } catch (e) {
-    console.error('Eroare salvare Sheet URL:', e);
-  }
-};
+// --- Local Storage (AsyncStorage) ---
 
 export const getLocalEntries = async () => {
   try {
-    const jsonValue = await AsyncStorage.getItem(STORAGE_KEY);
+    const jsonValue = await AsyncStorage.getItem(KEYS.ENTRIES);
     return jsonValue != null ? JSON.parse(jsonValue) : [];
   } catch (e) {
-    console.error('Eroare citire intrări locale:', e);
+    console.error('Eroare la citirea datelor locale:', e);
     return [];
   }
 };
 
 export const saveLocalEntries = async (entries) => {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    const jsonValue = JSON.stringify(entries);
+    await AsyncStorage.setItem(KEYS.ENTRIES, jsonValue);
   } catch (e) {
-    console.error('Eroare salvare intrări locale:', e);
+    console.error('Eroare la salvarea datelor locale:', e);
   }
 };
 
-// Preluare date din Google Sheet (GET) cu suport de urmărire redirect
-export const fetchFromSheet = async (sheetUrl) => {
-  const targetUrl = sheetUrl || DEFAULT_SHEET_URL;
+export const getStoredSheetUrl = async () => {
   try {
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      redirect: 'follow', // OBLIGATORIU pentru Google Apps Script redirects
-    });
-
-    const responseText = await response.text();
-
-    // Verificăm dacă răspunsul este într-adevăr JSON și nu HTML de eroare
-    if (responseText.trim().startsWith('<')) {
-      throw new Error(
-        'Răspunsul primit este o pagină HTML (posibil permisiuni Apps Script incorecte sau login cerut).'
-      );
-    }
-
-    const data = JSON.parse(responseText);
-    return data;
+    return await AsyncStorage.getItem(KEYS.SHEET_URL);
   } catch (e) {
-    console.error('Eroare fetch din Sheet:', e);
-    throw e;
+    console.error('Eroare la preluarea URL-ului Sheet:', e);
+    return null;
   }
 };
 
-// Trimitere date către Google Sheet (POST) - CORECTAT
-export const sendToSheet = async (sheetUrl, items) => {
-  const targetUrl = sheetUrl || DEFAULT_SHEET_URL;
+export const saveSheetUrl = async (url) => {
   try {
-    if (!targetUrl) return false;
-
-    // Ne asigurăm că trimitem un Array cu obiectele noastre
-    const payload = Array.isArray(items) ? items : [items];
-
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      redirect: 'follow',
-      body: JSON.stringify(payload),
-    });
-
-    return response.ok;
+    await AsyncStorage.setItem(KEYS.SHEET_URL, url);
   } catch (e) {
-    console.error('Eroare sendToSheet:', e);
-    return false;
+    console.error('Eroare la salvarea URL-ului Sheet:', e);
   }
 };
-
-const BABY_NAME_KEY = '@baby_name';
 
 export const getBabyName = async () => {
   try {
-    return (await AsyncStorage.getItem(BABY_NAME_KEY)) || 'Bebelușul'; // Valoare implicită
+    return await AsyncStorage.getItem(KEYS.BABY_NAME);
   } catch (e) {
+    console.error('Eroare la citirea numelui bebelușului:', e);
     return 'Bebelușul';
   }
 };
 
 export const saveBabyName = async (name) => {
   try {
-    await AsyncStorage.setItem(BABY_NAME_KEY, name);
+    await AsyncStorage.setItem(KEYS.BABY_NAME, name);
   } catch (e) {
-    console.error('Eroare la salvarea numelui', e);
+    console.error('Eroare la salvarea numelui bebelușului:', e);
+  }
+};
+
+export const getDropsEnabled = async () => {
+  try {
+    const val = await AsyncStorage.getItem(KEYS.DROPS_ENABLED);
+    return val !== null ? JSON.parse(val) : false;
+  } catch (e) {
+    console.error('Eroare la citirea setării pentru picături:', e);
+    return false;
+  }
+};
+
+export const saveDropsEnabled = async (enabled) => {
+  try {
+    await AsyncStorage.setItem(KEYS.DROPS_ENABLED, JSON.stringify(enabled));
+  } catch (e) {
+    console.error('Eroare la salvarea setării pentru picături:', e);
+  }
+};
+
+// --- Google Sheets Network Sync ---
+
+export const fetchFromSheet = async (url) => {
+  if (!url) return [];
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+      redirect: 'follow',
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('text/html')) {
+      console.log('Info: Google Sheet a returnat HTML (posibil eroare de deployment/permisiuni). Folosim datele locale.');
+      return [];
+    }
+
+    const text = await response.text();
+    if (!text || text.trim() === '') return [];
+
+    const json = JSON.parse(text);
+    return Array.isArray(json) ? json : [];
+  } catch (error) {
+    console.log('Sincronizare Sheet indisponibilă (offline sau eroare format):', error.message);
+    return [];
+  }
+};
+
+export const sendToSheet = async (url, data) => {
+  if (!url) return;
+  try {
+    const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    const payload = {
+      id: String(data.id || '').replace(/^'/, '').trim(),
+      date: data.date || '',
+      time: data.time || '',
+      type: data.type || '',
+      value: data.value !== undefined ? String(data.value) : '',
+      amount: data.amount !== undefined ? String(data.amount) : '',
+      fullDateTime: data.fullDateTime || nowString,
+      drops: data.drops !== undefined ? Number(data.drops) : 0,
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('text/html')) {
+      console.log('Info: Răspuns HTML primit la POST în Sheet.');
+      return { status: 'ok' };
+    }
+
+    const text = await response.text();
+    return text ? JSON.parse(text) : { status: 'ok' };
+  } catch (error) {
+    console.log('Eroare trimitere în Sheet (se va sincroniza local):', error.message);
+    return null;
   }
 };
