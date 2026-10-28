@@ -19,10 +19,12 @@ import {
   getStoredSheetUrl,
   sendToSheet,
   getTheme,
+  getLanguage,
   getForceOffline,
 } from '../services/storage';
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
+import { translations } from '../services/translations';
 
 export default function GrowthTrackerScreen() {
   const navigation = useNavigation();
@@ -30,14 +32,25 @@ export default function GrowthTrackerScreen() {
   const [height, setHeight] = useState(''); // cm
   const [loading, setLoading] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
+  const [currentLang, setCurrentLang] = useState('ro');
+
+  const t = translations[currentLang] || translations.ro;
 
   useEffect(() => {
     let isMounted = true;
-    getTheme().then((themeMode) => {
-      if (isMounted) {
-        setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+    const loadConfig = async () => {
+      try {
+        const themeMode = await getTheme();
+        const langCode = await getLanguage();
+        if (isMounted) {
+          setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+          setCurrentLang(langCode || 'ro');
+        }
+      } catch (e) {
+        console.error(e);
       }
-    });
+    };
+    loadConfig();
     return () => {
       isMounted = false;
     };
@@ -53,7 +66,10 @@ export default function GrowthTrackerScreen() {
 
   const handleSave = async () => {
     if (!weight.trim() && !height.trim()) {
-      Alert.alert('Atenție', 'Introdu cel puțin o valoare (greutate sau lungime).');
+      Alert.alert(
+        t.warning || 'Atenție',
+        t.growthWarning || 'Introdu cel puțin o valoare (greutate sau lungime).'
+      );
       return;
     }
 
@@ -100,7 +116,10 @@ export default function GrowthTrackerScreen() {
       handleBack();
     } catch (e) {
       console.error('Eroare la salvarea măsurătorilor:', e);
-      Alert.alert('Eroare', 'Nu s-au putut salva datele.');
+      Alert.alert(
+        t.error || 'Eroare',
+        t.saveError || 'Nu s-au putut salva datele.'
+      );
     } finally {
       setLoading(false);
     }
@@ -114,11 +133,15 @@ export default function GrowthTrackerScreen() {
         <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
       </TouchableOpacity>
 
-      <Text style={[styles.title, { color: currentTheme.textMain }]}>Creștere & Măsurători 📏</Text>
+      <Text style={[styles.title, { color: currentTheme.textMain }]}>
+        {t.growthTitle || 'Creștere & Măsurători 📏'}
+      </Text>
 
       <View style={[styles.inputCard, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: currentTheme.textSub }]}>Greutate (kg):</Text>
+          <Text style={[styles.label, { color: currentTheme.textSub }]}>
+            {t.weightLabel || 'Greutate (kg):'}
+          </Text>
           <View style={[styles.inputRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}>
             <MaterialCommunityIcons name="scale-bathroom" size={24} color="#27AE60" style={styles.icon} />
             <TextInput
@@ -134,7 +157,9 @@ export default function GrowthTrackerScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: currentTheme.textSub }]}>Lungime / Înălțime (cm):</Text>
+          <Text style={[styles.label, { color: currentTheme.textSub }]}>
+            {t.heightLabel || 'Lungime / Înălțime (cm):'}
+          </Text>
           <View style={[styles.inputRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}>
             <MaterialCommunityIcons name="ruler" size={24} color="#27AE60" style={styles.icon} />
             <TextInput
@@ -153,7 +178,7 @@ export default function GrowthTrackerScreen() {
           {loading ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.saveBtnText}>Salvează Măsurătoarea</Text>
+            <Text style={styles.saveBtnText}>{t.save || 'Salvează Măsurătoarea'}</Text>
           )}
         </TouchableOpacity>
       </View>

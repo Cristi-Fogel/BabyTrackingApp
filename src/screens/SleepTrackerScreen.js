@@ -19,10 +19,12 @@ import {
   getStoredSheetUrl,
   sendToSheet,
   getTheme,
+  getLanguage,
   getForceOffline,
 } from '../services/storage';
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
+import { translations } from '../services/translations';
 
 export default function SleepTrackerScreen() {
   const navigation = useNavigation();
@@ -32,14 +34,25 @@ export default function SleepTrackerScreen() {
   const [endTime, setEndTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
+  const [currentLang, setCurrentLang] = useState('ro');
+
+  const t = translations[currentLang] || translations.ro;
 
   useEffect(() => {
     let isMounted = true;
-    getTheme().then((themeMode) => {
-      if (isMounted) {
-        setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+    const loadConfig = async () => {
+      try {
+        const themeMode = await getTheme();
+        const langCode = await getLanguage();
+        if (isMounted) {
+          setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+          setCurrentLang(langCode || 'ro');
+        }
+      } catch (e) {
+        console.error(e);
       }
-    });
+    };
+    loadConfig();
     return () => {
       isMounted = false;
     };
@@ -70,9 +83,12 @@ export default function SleepTrackerScreen() {
       const cleanStart = startTime.trim() || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const cleanEnd = endTime.trim();
 
+      const sleepLabel = t.sleepStartLabel || 'Adormit la';
+      const wakeLabel = t.wakeEndLabel || 'Trezit la';
+
       const valueText = cleanEnd
-        ? `Adormit la ${cleanStart} - Trezit la ${cleanEnd}`
-        : `Adormit la ${cleanStart}`;
+        ? `${sleepLabel} ${cleanStart} - ${wakeLabel} ${cleanEnd}`
+        : `${sleepLabel} ${cleanStart}`;
 
       const newEntry = {
         id: now.getTime().toString(),
@@ -104,7 +120,7 @@ export default function SleepTrackerScreen() {
       handleBack();
     } catch (e) {
       console.error('Eroare la salvarea somnului:', e);
-      Alert.alert('Eroare', 'Nu s-a putut salva somnul.');
+      Alert.alert(t.error || 'Eroare', t.saveError || 'Nu s-a putut salva somnul.');
       setIsSubmitting(false); // Reactivăm butonul doar dacă apare o eroare
     }
   };
@@ -117,10 +133,14 @@ export default function SleepTrackerScreen() {
         <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
       </TouchableOpacity>
 
-      <Text style={[styles.title, { color: currentTheme.textMain }]}>Înregistrare Somn 🌙</Text>
+      <Text style={[styles.title, { color: currentTheme.textMain }]}>
+        {t.sleepTitle || 'Înregistrare Somn 🌙'}
+      </Text>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: currentTheme.textSub }]}>Ora adormirii:</Text>
+        <Text style={[styles.label, { color: currentTheme.textSub }]}>
+          {t.sleepStartTimeLabel || 'Ora adormirii:'}
+        </Text>
         <TextInput
           style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
           value={startTime}
@@ -131,10 +151,12 @@ export default function SleepTrackerScreen() {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: currentTheme.textSub }]}>Ora trezirii (Opțional):</Text>
+        <Text style={[styles.label, { color: currentTheme.textSub }]}>
+          {t.sleepEndTimeLabel || 'Ora trezirii (Opțional):'}
+        </Text>
         <TextInput
           style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-          placeholder="Lăsați gol dacă doarme acum"
+          placeholder={t.sleepEndTimePlaceholder || 'Lăsați gol dacă doarme acum'}
           placeholderTextColor={currentTheme.inputPlaceholder}
           value={endTime}
           onChangeText={setEndTime}
@@ -150,7 +172,7 @@ export default function SleepTrackerScreen() {
         {isSubmitting ? (
           <ActivityIndicator size="small" color="#FFF" />
         ) : (
-          <Text style={styles.saveBtnText}>Creează Înregistrare</Text>
+          <Text style={styles.saveBtnText}>{t.save || 'Creează Înregistrare'}</Text>
         )}
       </TouchableOpacity>
     </SafeAreaView>

@@ -1,6 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Switch, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  SafeAreaView,
+  Platform,
+  StatusBar,
+  Switch,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   getStoredSheetUrl,
   saveSheetUrl,
@@ -12,193 +26,281 @@ import {
   saveForceOffline,
   getTheme,
   saveTheme,
+  getLanguage,
+  saveLanguage,
 } from '../services/storage';
+import { lightTheme } from '../theme/lightTheme';
+import { darkTheme } from '../theme/darkTheme';
+import { translations } from '../services/translations';
 
 export default function SettingsScreen({ navigation }) {
-  const [url, setUrl] = useState('');
+  const [sheetUrl, setSheetUrl] = useState('');
   const [babyName, setBabyName] = useState('');
   const [dropsEnabled, setDropsEnabled] = useState(false);
-
-  // Stări noi
   const [forceOffline, setForceOffline] = useState(false);
-  const [selectedTheme, setSelectedTheme] = useState('default'); // 'default' sau 'dark'
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [currentLang, setCurrentLang] = useState('ro');
+  const [loading, setLoading] = useState(false);
 
+  // Stări inițiale pentru a detecta dacă s-au făcut modificări
+  const [initialState, setInitialState] = useState({
+    sheetUrl: '',
+    babyName: '',
+    dropsEnabled: false,
+    forceOffline: false,
+    isDarkMode: false,
+    currentLang: 'ro',
+  });
+
+  const t = translations[currentLang] || translations.ro;
+
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const loadSettings = async () => {
+        try {
+          const url = await getStoredSheetUrl();
+          const name = await getBabyName();
+          const drops = await getDropsEnabled();
+          const offline = await getForceOffline();
+          const themeMode = await getTheme();
+          const lang = await getLanguage();
+
+          if (isMounted) {
+            const urlVal = url || '';
+            const nameVal = name || '';
+            const dropsVal = !!drops;
+            const offlineVal = !!offline;
+            const darkVal = themeMode === 'dark';
+            const langVal = lang || 'ro';
+
+            setSheetUrl(urlVal);
+            setBabyName(nameVal);
+            setDropsEnabled(dropsVal);
+            setForceOffline(offlineVal);
+            setIsDarkMode(darkVal);
+            setCurrentLang(langVal);
+
+            // Salvăm starea inițială pentru comparație
+            setInitialState({
+              sheetUrl: urlVal,
+              babyName: nameVal,
+              dropsEnabled: dropsVal,
+              forceOffline: offlineVal,
+              isDarkMode: darkVal,
+              currentLang: langVal,
+            });
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      loadSettings();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
+
+  // Verificăm dacă există modificări nesalvate
+  const hasChanges =
+    sheetUrl !== initialState.sheetUrl ||
+    babyName !== initialState.babyName ||
+    dropsEnabled !== initialState.dropsEnabled ||
+    forceOffline !== initialState.forceOffline ||
+    isDarkMode !== initialState.isDarkMode ||
+    currentLang !== initialState.currentLang;
+
+  // Interceptăm butonul de back / ieșire din ecran
   useEffect(() => {
-    getStoredSheetUrl().then((saved) => {
-      if (saved) setUrl(saved);
-    });
-    getBabyName().then((name) => {
-      if (name) setBabyName(name);
-    });
-    getDropsEnabled().then((enabled) => {
-      setDropsEnabled(enabled);
-    });
-    getForceOffline().then((offline) => {
-      setForceOffline(offline);
-    });
-    getTheme().then((th) => {
-      setSelectedTheme(th);
-    });
-  }, []);
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!hasChanges) {
+        return;
+      }
 
-  const handleSave = async () => {
-    await saveSheetUrl(url);
-    await saveBabyName(babyName.trim() || 'Bebelușul');
-    await saveDropsEnabled(dropsEnabled);
-    await saveForceOffline(forceOffline);
-    await saveTheme(selectedTheme);
+      e.preventDefault();
 
-    Alert.alert('Succes', 'Setările au fost salvate cu succes!');
-    navigation.goBack();
+      Alert.alert(
+        'Modificări nesalvate',
+        'Ai modificări care nu au fost salvate. Dorești să ieși fără să salvezi?',
+        [
+          { text: 'Rămâi', style: 'cancel', onPress: () => {} },
+          {
+            text: 'Ieși',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation, hasChanges, sheetUrl, babyName, dropsEnabled, forceOffline, isDarkMode, currentLang]);
+
+  const handleSaveAll = async () => {
+    setLoading(true);
+    try {
+      await saveSheetUrl(sheetUrl.trim());
+      await saveBabyName(babyName.trim());
+      await saveDropsEnabled(dropsEnabled);
+      await saveForceOffline(forceOffline);
+      await saveTheme(isDarkMode ? 'dark' : 'light');
+      await saveLanguage(currentLang);
+
+      setInitialState({
+        sheetUrl: sheetUrl.trim(),
+        babyName: babyName.trim(),
+        dropsEnabled,
+        forceOffline,
+        isDarkMode,
+        currentLang,
+      });
+
+      Alert.alert('Succes', 'Setările au fost salvate cu succes!');
+    } catch (e) {
+      Alert.alert('Eroare', 'Nu s-au putut salva setările.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const isDark = selectedTheme === 'dark';
+  const currentTheme = isDarkMode ? darkTheme : lightTheme;
 
   return (
-    <ScrollView style={[styles.container, isDark && styles.darkContainer]}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-        <Ionicons name="arrow-back" size={24} color={isDark ? '#FFF' : '#333'} />
-      </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
+      <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      <Text style={[styles.title, isDark && styles.darkText]}>Setări Aplicație ⚙️</Text>
-
-      {/* Setare Nume Bebe */}
-      <Text style={[styles.label, isDark && styles.darkSubText]}>Numele Bebe:</Text>
-      <TextInput
-        style={[styles.inputShort, isDark && styles.darkInput]}
-        placeholder="ex: Sofia / David"
-        placeholderTextColor={isDark ? '#888' : '#999'}
-        value={babyName}
-        onChangeText={setBabyName}
-      />
-
-      {/* Setare Picături */}
-      <View style={[styles.switchRow, isDark && styles.darkCard]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.label, isDark && styles.darkText]}>Notificare Picături Zilnice</Text>
-          <Text style={[styles.subLabel, isDark && styles.darkSubText]}>Afișează reminder pe ecranul principal</Text>
+      {/* Header Setări */}
+      <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+        <View style={styles.rowBetween}>
+          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>
+            {t.settingsTitle || 'Setări'}
+          </Text>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="close" size={24} color={currentTheme.textSub} />
+          </TouchableOpacity>
         </View>
-        <Switch
-          value={dropsEnabled}
-          onValueChange={setDropsEnabled}
-          trackColor={{ false: '#767577', true: '#27AE60' }}
-          thumbColor={dropsEnabled ? '#FFF' : '#f4f3f4'}
-        />
       </View>
 
-      {/* 1. Toggle Blochează Sincronizarea (Mod Offline Forțat) */}
-      <View style={[styles.switchRow, isDark && styles.darkCard]}>
-        <View style={{ flex: 1, marginRight: 8 }}>
-          <Text style={[styles.label, isDark && styles.darkText]}>Mod Doar Local (Fără Internet)</Text>
-          <Text style={[styles.subLabel, isDark && styles.darkSubText]}>
-            Oprește orice conexiune/sincronizare cu Google Sheet până la dezactivare.
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+
+        {/* Secțiune Limbă / Language Selector */}
+        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+          <Text style={[styles.label, { color: currentTheme.textMain }]}>
+            {t.language || 'Limbă / Language / Nyelv'}
           </Text>
+          <View style={[styles.row, { marginTop: 8 }]}>
+            {['ro', 'en', 'hu'].map((code) => (
+              <TouchableOpacity
+                key={code}
+                style={[
+                  styles.langBtn,
+                  { borderColor: currentTheme.border, backgroundColor: currentTheme.inputBackground },
+                  currentLang === code && { backgroundColor: '#D35400', borderColor: '#D35400' },
+                ]}
+                onPress={() => setCurrentLang(code)}
+              >
+                <Text
+                  style={[
+                    styles.langText,
+                    { color: currentLang === code ? '#FFF' : currentTheme.textMain },
+                  ]}
+                >
+                  {code.toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-        <Switch
-          value={forceOffline}
-          onValueChange={setForceOffline}
-          trackColor={{ false: '#767577', true: '#E67E22' }}
-          thumbColor={forceOffline ? '#FFF' : '#f4f3f4'}
-        />
-      </View>
 
-      {/* 2. Selector de Temă */}
-      <Text style={[styles.label, { marginTop: 20 }, isDark && styles.darkSubText]}>Temă Interfață:</Text>
-      <View style={styles.themeContainer}>
-        <TouchableOpacity
-          style={[
-            styles.themeOption,
-            selectedTheme === 'default' && styles.themeOptionSelected,
-            isDark && styles.darkCard,
-          ]}
-          onPress={() => setSelectedTheme('default')}
-        >
-          <Ionicons name="sunny-outline" size={20} color={selectedTheme === 'default' ? '#D35400' : '#888'} />
-          <Text style={[styles.themeText, selectedTheme === 'default' && styles.themeTextActive, isDark && styles.darkText]}>
-            Default (Warm)
-          </Text>
+        {/* Secțiune Nume Bebeluș & Google Sheet */}
+        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+          <Text style={[styles.label, { color: currentTheme.textMain }]}>Nume Bebeluș:</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+            value={babyName}
+            onChangeText={setBabyName}
+            placeholder="Introduceți numele bebelușului..."
+            placeholderTextColor={currentTheme.inputPlaceholder}
+          />
+
+          <Text style={[styles.label, { color: currentTheme.textMain, marginTop: 10 }]}>Google Sheet WebApp URL:</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+            value={sheetUrl}
+            onChangeText={setSheetUrl}
+            placeholder="https://script.google.com/..."
+            placeholderTextColor={currentTheme.inputPlaceholder}
+            autoCapitalize="none"
+          />
+        </View>
+
+        {/* Secțiune Toggle-uri */}
+        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Activează notificarea picături zilnice 💧</Text>
+            <Switch
+              value={dropsEnabled}
+              onValueChange={setDropsEnabled}
+              trackColor={{ false: '#767577', true: '#27AE60' }}
+            />
+          </View>
+
+          <View style={[styles.settingRow, { marginTop: 12 }]}>
+            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Forțează modul Offline 📴</Text>
+            <Switch
+              value={forceOffline}
+              onValueChange={setForceOffline}
+              trackColor={{ false: '#767577', true: '#E67E22' }}
+            />
+          </View>
+
+          <View style={[styles.settingRow, { marginTop: 12 }]}>
+            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Mod Întunecat (Dark Theme) 🌙</Text>
+            <Switch
+              value={isDarkMode}
+              onValueChange={setIsDarkMode}
+              trackColor={{ false: '#767577', true: '#2980B9' }}
+            />
+          </View>
+        </View>
+
+        {/* Buton Salvare */}
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAll} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 6 }} />
+              <Text style={styles.saveBtnText}>Salvează Setările</Text>
+            </>
+          )}
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.themeOption,
-            selectedTheme === 'dark' && styles.themeOptionSelectedDark,
-            isDark && styles.darkCard,
-          ]}
-          onPress={() => setSelectedTheme('dark')}
-        >
-          <Ionicons name="moon-outline" size={20} color={selectedTheme === 'dark' ? '#9B59B6' : '#888'} />
-          <Text style={[styles.themeText, selectedTheme === 'dark' && styles.themeTextActiveDark, isDark && styles.darkText]}>
-            Dark Theme
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Setare Google Sheet URL */}
-      <Text style={[styles.label, { marginTop: 20 }, isDark && styles.darkSubText]}>Google Apps Script Web App URL:</Text>
-      <TextInput
-        style={[styles.input, isDark && styles.darkInput]}
-        multiline
-        placeholder="https://script.google.com/macros/s/..."
-        placeholderTextColor={isDark ? '#888' : '#999'}
-        value={url}
-        onChangeText={setUrl}
-      />
-
-      <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>Salvează Setările</Text>
-      </TouchableOpacity>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F0', padding: 20 },
-  darkContainer: { backgroundColor: '#121212' },
-  backBtn: { marginTop: 30, marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 20 },
-  darkText: { color: '#FFF' },
-  darkSubText: { color: '#AAA' },
-  label: { fontSize: 14, color: '#666', marginBottom: 8, fontWeight: '600' },
-  subLabel: { fontSize: 12, color: '#888' },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 14,
-    backgroundColor: '#FFF',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DDD',
-  },
-  darkCard: { backgroundColor: '#1E1E1E', borderColor: '#333' },
-  inputShort: { backgroundColor: '#FFF', padding: 12, borderRadius: 12, fontSize: 14, borderWidth: 1, borderColor: '#DDD' },
-  input: { backgroundColor: '#FFF', padding: 14, borderRadius: 12, fontSize: 14, minHeight: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: '#DDD' },
-  darkInput: { backgroundColor: '#1E1E1E', borderColor: '#333', color: '#FFF' },
-
-  // Stiluri selector temă
-  themeContainer: { flexDirection: 'row', justifyContent: 'space-between' },
-  themeOption: {
+  container: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DDD',
-    marginRight: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    // Corectare padding superior în funcție de sistemul de operare pentru a evita suprapunerea cu ceasul/bateria
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 10,
   },
-  themeOptionSelected: { borderColor: '#D35400', borderWidth: 2, backgroundColor: '#FDF2E9' },
-  themeOptionSelectedDark: { borderColor: '#9B59B6', borderWidth: 2, backgroundColor: '#2C1E38' },
-  themeText: { marginLeft: 8, fontWeight: 'bold', fontSize: 13, color: '#666' },
-  themeTextActive: { color: '#D35400' },
-  themeTextActiveDark: { color: '#9B59B6' },
-
-  saveBtn: { backgroundColor: '#4CAF50', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 24 },
-  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  card: { padding: 12, borderRadius: 10, marginBottom: 8, elevation: 2, borderWidth: 1 },
+  cardTitle: { fontSize: 15, fontWeight: 'bold' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  label: { fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 6, padding: 8, fontSize: 13 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  settingText: { fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },
+  langBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginHorizontal: 3 },
+  langText: { fontSize: 13, fontWeight: 'bold' },
+  saveBtn: { flexDirection: 'row', backgroundColor: '#27AE60', paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 4, marginBottom: 15 },
+  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
 });

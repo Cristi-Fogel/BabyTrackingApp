@@ -26,17 +26,22 @@ import {
   deleteEntryById,
   updateEntryValue,
   getTheme,
+  getLanguage,
 } from '../services/storage';
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
+import { translations } from '../services/translations';
 
 export default function MamaScreen({ navigation }) {
   const [sheetUrl, setSheetUrl] = useState('');
   const [isUrlSaved, setIsUrlSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Stare pentru temă
+  // Stare pentru temă și limbă
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
+  const [currentLang, setCurrentLang] = useState('ro');
+
+  const t = translations[currentLang] || translations.ro;
 
   // Stări formular Alăptare & DateTimePicker nativ
   const [date, setDate] = useState(new Date());
@@ -59,10 +64,12 @@ export default function MamaScreen({ navigation }) {
           const url = await getStoredSheetUrl();
           const local = await getLocalEntries();
           const themeMode = await getTheme();
+          const langCode = await getLanguage();
 
           if (isMounted) {
             setEntries(local || []);
             setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+            setCurrentLang(langCode || 'ro');
             if (url) {
               setSheetUrl(url);
               setIsUrlSaved(true);
@@ -154,7 +161,7 @@ export default function MamaScreen({ navigation }) {
       'Schimbare Link',
       'Dorești să schimbi link-ul către Google Sheet?',
       [
-        { text: 'Anulează', style: 'cancel' },
+        { text: t.cancel || 'Anulează', style: 'cancel' },
         {
           text: 'Da, schimbă',
           onPress: () => {
@@ -252,7 +259,7 @@ export default function MamaScreen({ navigation }) {
   };
 
   const mamaEntries = (entries || [])
-    .filter((item) => item.type === 'alaptare' && item.value)
+    .filter((item) => (item.type === 'alaptare' || item.type === 'mama') && item.value)
     .sort((a, b) => {
       const timeA = parseInt(String(a.id).replace(/^'/, '').trim(), 10) || 0;
       const timeB = parseInt(String(b.id).replace(/^'/, '').trim(), 10) || 0;
@@ -268,7 +275,7 @@ export default function MamaScreen({ navigation }) {
       {/* 1. Header Google Sheet Sync */}
       <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <View style={styles.rowBetween}>
-          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Google Sheet Sync</Text>
+          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>{t.syncTitle || 'Google Sheet Sync'}</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
             <Ionicons name="settings-outline" size={22} color={currentTheme.textSub} />
           </TouchableOpacity>
@@ -278,14 +285,14 @@ export default function MamaScreen({ navigation }) {
           <View style={[styles.row, { marginTop: 8 }]}>
             <TextInput
               style={[styles.input, { flex: 1, backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-              placeholder="Introdu URL WebApp..."
+              placeholder={t.connectPlaceholder || 'Introdu URL WebApp...'}
               placeholderTextColor={currentTheme.inputPlaceholder}
               value={sheetUrl}
               onChangeText={setSheetUrl}
               autoCapitalize="none"
             />
             <TouchableOpacity style={styles.button} onPress={handleSaveUrl}>
-              <Text style={styles.buttonText}>Salvează</Text>
+              <Text style={styles.buttonText}>{t.save || 'Salvează'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -293,7 +300,7 @@ export default function MamaScreen({ navigation }) {
             <View style={{ flex: 1, marginRight: 8, flexDirection: 'row', alignItems: 'center' }}>
               {loading && <ActivityIndicator size="small" color="#D81B60" style={{ marginRight: 6 }} />}
               <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>
-                Conectat: {sheetUrl}
+                {t.connected || 'Conectat'}: {sheetUrl}
               </Text>
             </View>
             <View style={[styles.row, { flexShrink: 0 }]}>
@@ -301,12 +308,12 @@ export default function MamaScreen({ navigation }) {
                 style={[styles.buttonSmall, { backgroundColor: '#27AE60' }]}
                 onPress={() => performSync(sheetUrl, entries)}>
                 <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 2 }} />
-                <Text style={styles.buttonText}>Sync</Text>
+                <Text style={styles.buttonText}>{t.sync || 'Sync'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.buttonSmall, { backgroundColor: '#E67E22', marginLeft: 6 }]}
                 onPress={handleSwapUrl}>
-                <Text style={styles.buttonText}>Swap</Text>
+                <Text style={styles.buttonText}>{t.swap || 'Swap'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -332,10 +339,10 @@ export default function MamaScreen({ navigation }) {
 
       {/* 3. Formular Alăptare */}
       <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-        <Text style={styles.sectionHeader}>Înregistrare Alăptare 🤱</Text>
+        <Text style={styles.sectionHeader}>Înregistrare {t.mama || 'MAMA'} 🤱</Text>
 
         <View style={styles.rowInline}>
-          {/* Selector Oră Nativ (În loc de TextInput) */}
+          {/* Selector Oră Nativ */}
           <View style={styles.timeContainer}>
             <Text style={[styles.labelSmall, { color: currentTheme.textSub }]}>Ora:</Text>
             <TouchableOpacity
@@ -424,7 +431,7 @@ export default function MamaScreen({ navigation }) {
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 6 }} />
-              <Text style={styles.saveBtnText}>Salvează Alăptare</Text>
+              <Text style={styles.saveBtnText}>{t.save || 'Salvează'} Alăptare</Text>
             </>
           )}
         </TouchableOpacity>
@@ -432,11 +439,11 @@ export default function MamaScreen({ navigation }) {
 
       {/* 4. Istoric MAMA */}
       <View style={[styles.card, { flex: 1, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-        <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Istoric Alăptare ({mamaEntries.length})</Text>
+        <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Istoric {t.mama || 'MAMA'} ({mamaEntries.length})</Text>
 
         <ScrollView style={{ flex: 1, marginTop: 8 }}>
           {mamaEntries.length === 0 ? (
-            <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>Nu există înregistrări de alăptare.</Text>
+            <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>{t.noActivity || 'Nu există înregistrări.'}</Text>
           ) : (
             mamaEntries.map((item, index) => {
               const formattedDate = cleanDate(item.date);
@@ -448,17 +455,17 @@ export default function MamaScreen({ navigation }) {
                   key={`mama_${index}_${item.id}`}
                   style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
                   onLongPress={() => {
-                    Alert.alert('Opțiuni Înregistrare', 'Alege o acțiune:', [
-                      { text: 'Anulează', style: 'cancel' },
-                      { text: 'Editează', onPress: () => handleOpenEdit(item) },
-                      { text: 'Șterge', style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
+                    Alert.alert(t.actionTitle || 'Opțiuni Înregistrare', t.actionSub || 'Alege o acțiune:', [
+                      { text: t.cancel || 'Anulează', style: 'cancel' },
+                      { text: t.edit || 'Editează', onPress: () => handleOpenEdit(item) },
+                      { text: t.delete || 'Șterge', style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
                     ]);
                   }}
                 >
                   <View style={styles.row}>
                     <Ionicons name="woman-outline" size={20} color="#D81B60" style={{ marginRight: 10 }} />
                     <View>
-                      <Text style={[styles.historyType, { color: currentTheme.textMain }]}>ALĂPTARE</Text>
+                      <Text style={[styles.historyType, { color: currentTheme.textMain }]}>{t.mama || 'MAMA'}</Text>
                       <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>{dateTimeDisplay}</Text>
                     </View>
                   </View>
@@ -474,12 +481,12 @@ export default function MamaScreen({ navigation }) {
       <Modal visible={editModalVisible} animationType="slide" transparent={true}>
         <View style={[styles.modalOverlay, { backgroundColor: currentTheme.modalOverlay }]}>
           <View style={[styles.modalContent, { backgroundColor: currentTheme.modalBackground }]}>
-            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>Editează Înregistrarea</Text>
+            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>{t.editTitle || 'Editează Înregistrarea'}</Text>
             <TextInput
               style={[styles.modalInput, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
               value={editedValue}
               onChangeText={setEditedValue}
-              placeholder="Modifică valoarea..."
+              placeholder={t.editPlaceholder || 'Modifică valoarea...'}
               placeholderTextColor={currentTheme.inputPlaceholder}
             />
             <View style={styles.modalButtonsRow}>
@@ -487,13 +494,13 @@ export default function MamaScreen({ navigation }) {
                 style={[styles.modalBtn, { backgroundColor: '#95A5A6' }]}
                 onPress={() => setEditModalVisible(false)}
               >
-                <Text style={styles.buttonText}>Anulează</Text>
+                <Text style={styles.buttonText}>{t.cancel || 'Anulează'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, { backgroundColor: '#27AE60', marginLeft: 10 }]}
                 onPress={handleConfirmEdit}
               >
-                <Text style={styles.buttonText}>Salvează</Text>
+                <Text style={styles.buttonText}>{t.save || 'Salvează'}</Text>
               </TouchableOpacity>
             </View>
           </View>

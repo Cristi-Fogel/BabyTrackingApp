@@ -26,11 +26,13 @@ import {
   getDropsEnabled,
   getForceOffline,
   getTheme,
+  getLanguage,
   deleteEntryById,
   updateEntryValue,
 } from '../services/storage';
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
+import { translations } from '../services/translations';
 
 export default function HomeScreen({ navigation }) {
   const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwWQ7UAaX_5fi1GT9nyNmpM5xZbUvVeZ2AY_mISSk7ANXoFSC6Y3Jq37y_EB5Fs4Toa3Q/exec';
@@ -42,9 +44,12 @@ export default function HomeScreen({ navigation }) {
   const [babyName, setBabyName] = useState('Bebelușul');
   const [dropsEnabled, setDropsEnabled] = useState(false);
 
-  // Stări pentru Offline real și Temă
+  // Stări pentru Offline, Temă și Limbă
   const [isOffline, setIsOffline] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
+  const [currentLang, setCurrentLang] = useState('ro');
+
+  const t = translations[currentLang] || translations.ro;
 
   // Stare pentru Filtru Istoric ('all', 'milk', 'sleep', 'growth', 'mama')
   const [filterType, setFilterType] = useState('all');
@@ -55,7 +60,7 @@ export default function HomeScreen({ navigation }) {
 
   const isSyncingRef = useRef(false);
 
-  // --- FUNCȚII HELPER DECLARATE PRIMELE ---
+  // --- FUNCȚII HELPER ---
   const cleanDate = (dateStr) => {
     if (!dateStr) return '';
     const str = String(dateStr);
@@ -97,7 +102,6 @@ export default function HomeScreen({ navigation }) {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  // ----------------------------------------
 
   useFocusEffect(
     useCallback(() => {
@@ -115,6 +119,7 @@ export default function HomeScreen({ navigation }) {
           const savedDropsEnabled = await getDropsEnabled();
           const forcedOffline = await getForceOffline();
           const themeMode = await getTheme();
+          const langCode = await getLanguage();
 
           const safeLocal = Array.isArray(localData) ? localData : [];
 
@@ -124,6 +129,7 @@ export default function HomeScreen({ navigation }) {
             setDropsEnabled(savedDropsEnabled);
             setIsOffline(forcedOffline);
             setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+            setCurrentLang(langCode || 'ro');
           }
 
           if (forcedOffline) {
@@ -234,8 +240,7 @@ export default function HomeScreen({ navigation }) {
           value: 'Administrate',
           drops: 1,
         }).catch(() => {});
-      }
-      else if (isDropsOn) {
+      } else if (isDropsOn) {
         const hasRemoteToday = cleanRemote.some(
           (e) => e.type === 'drops' && cleanDate(e.date) === todayStr
         );
@@ -362,14 +367,14 @@ export default function HomeScreen({ navigation }) {
 
   // --- LOGICĂ FILTRARE ---
   const filteredEntries = allUniqueEntries.filter((item) => {
-    const t = String(item.type || '').toLowerCase();
+    const tItem = String(item.type || '').toLowerCase();
     if (filterType === 'all') {
-      return t !== 'mama' && t !== 'alaptare';
+      return tItem !== 'mama' && tItem !== 'alaptare';
     }
-    if (filterType === 'milk') return t === 'milk' || t === 'lapte';
-    if (filterType === 'sleep') return t === 'sleep';
-    if (filterType === 'growth') return t === 'growth' || t === 'crestere';
-    if (filterType === 'mama') return t === 'mama' || t === 'alaptare';
+    if (filterType === 'milk') return tItem === 'milk' || tItem === 'lapte';
+    if (filterType === 'sleep') return tItem === 'sleep';
+    if (filterType === 'growth') return tItem === 'growth' || tItem === 'crestere';
+    if (filterType === 'mama') return tItem === 'mama' || tItem === 'alaptare';
     return true;
   });
 
@@ -460,10 +465,23 @@ export default function HomeScreen({ navigation }) {
     setCurrentEditingItem(null);
   };
 
+  // --- FUNCȚIE TRADUCERE TIPURI DE ACTIVITĂȚI ---
+  const translateType = (type) => {
+    const tLower = String(type || '').toLowerCase();
+    if (tLower === 'milk' || tLower === 'lapte') return t.milk;
+    if (tLower === 'sleep' || tLower === 'somn') return t.sleep;
+    if (tLower === 'growth' || tLower === 'crestere') return t.growth;
+    if (tLower === 'mama' || tLower === 'alaptare') return t.mama;
+    return tLower.toUpperCase();
+  };
+
+  // --- AFISARE DETALIATĂ A SOMNULUI (STIVUIT VERTICAL) ---
   const renderSleepDetails = (value) => {
     if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>-</Text>;
+
     const sleepMatch = value.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
     const wakeMatch = value.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
+
     const sleepTime = sleepMatch ? sleepMatch[1].trim() : '';
     const wakeTime = wakeMatch ? wakeMatch[1].trim() : '';
 
@@ -509,7 +527,7 @@ export default function HomeScreen({ navigation }) {
       {/* Sync Header */}
       <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <View style={styles.rowBetween}>
-          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Google Sheet Sync</Text>
+          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>{t.syncTitle}</Text>
           <View style={styles.row}>
             {loading && <ActivityIndicator size="small" color={currentTheme.tint} style={{ marginRight: 8 }} />}
             <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
@@ -522,30 +540,30 @@ export default function HomeScreen({ navigation }) {
           <View style={[styles.row, { marginTop: 4 }]}>
             <TextInput
               style={[styles.input, { flex: 1, backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-              placeholder="Introdu URL WebApp"
+              placeholder={t.connectPlaceholder}
               placeholderTextColor={currentTheme.inputPlaceholder}
               value={sheetUrl}
               onChangeText={setSheetUrl}
               autoCapitalize="none"
             />
             <TouchableOpacity style={[styles.button, { backgroundColor: currentTheme.tint }]} onPress={handleSaveUrl}>
-              <Text style={styles.buttonText}>Salvează</Text>
+              <Text style={styles.buttonText}>{t.save}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={[styles.rowBetween, { marginTop: 4 }]}>
-            <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>Conectat: {sheetUrl}</Text>
+            <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>{t.connected}: {sheetUrl}</Text>
             <View style={styles.row}>
               <TouchableOpacity
                 style={[styles.buttonSmall, { backgroundColor: '#27AE60' }]}
                 onPress={() => performSync(sheetUrl, entries, dropsEnabled)}>
                 <Ionicons name="refresh" size={12} color="#FFF" style={{ marginRight: 2 }} />
-                <Text style={styles.buttonText}>Sync</Text>
+                <Text style={styles.buttonText}>{t.sync}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.buttonSmall, { backgroundColor: '#E67E22', marginLeft: 4 }]}
                 onPress={handleSwapUrl}>
-                <Text style={styles.buttonText}>Swap</Text>
+                <Text style={styles.buttonText}>{t.swap}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -555,7 +573,7 @@ export default function HomeScreen({ navigation }) {
       {/* MESAJUL DE LIPSĂ INTERNET */}
       {isOffline && (
         <View style={{ backgroundColor: '#ffcccc', padding: 6, marginVertical: 2, borderRadius: 6 }}>
-          <Text style={{ color: '#900', fontWeight: 'bold', fontSize: 11 }}>⚠️ Fără internet / Sincronizare oprită.</Text>
+          <Text style={{ color: '#900', fontWeight: 'bold', fontSize: 11 }}>{t.offlineWarning}</Text>
         </View>
       )}
 
@@ -565,32 +583,32 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.row}>
             <Ionicons name="medkit-outline" size={22} color="#FFF" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.dropsTitle}>Nu uita de picături! 💧</Text>
-              <Text style={styles.dropsSub}>Nu s-au administrat astăzi pentru {babyName}.</Text>
+              <Text style={styles.dropsTitle}>{t.dropsTitle}</Text>
+              <Text style={styles.dropsSub}>{t.dropsSub(babyName)}</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.dropsBtn} onPress={handleAdministerDrops}>
             <Ionicons name="checkmark-circle-outline" size={16} color="#27AE60" style={{ marginRight: 4 }} />
-            <Text style={styles.dropsBtnText}>Le-am administrat</Text>
+            <Text style={styles.dropsBtnText}>{t.dropsBtn}</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Meniu Navigare (Cu padding mărit și mai aerisit) */}
-      <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>Meniu Activități</Text>
+      {/* Meniu Activități */}
+      <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>{t.menuHeader}</Text>
       <View style={styles.menuGridContainer}>
         <View style={styles.menuRow}>
           <TouchableOpacity
             style={[styles.menuCard, { backgroundColor: '#E67E22' }]}
             onPress={() => navigation.navigate('MilkTracker')}>
             <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
-            <Text style={styles.menuText}>Lapte</Text>
+            <Text style={styles.menuText}>{t.milk}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.menuCard, { backgroundColor: '#2980B9' }]}
             onPress={() => navigation.navigate('SleepTracker')}>
             <Ionicons name="moon-outline" size={20} color="#FFF" />
-            <Text style={styles.menuText}>Somn</Text>
+            <Text style={styles.menuText}>{t.sleep}</Text>
           </TouchableOpacity>
         </View>
 
@@ -599,13 +617,13 @@ export default function HomeScreen({ navigation }) {
             style={[styles.menuCard, { backgroundColor: '#27AE60' }]}
             onPress={() => navigation.navigate('GrowthTracker')}>
             <MaterialCommunityIcons name="ruler" size={20} color="#FFF" />
-            <Text style={styles.menuText}>Creștere</Text>
+            <Text style={styles.menuText}>{t.growth}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.menuCard, { backgroundColor: '#D81B60' }]}
             onPress={() => navigation.navigate('Mama')}>
             <Ionicons name="woman-outline" size={20} color="#FFF" />
-            <Text style={styles.menuText}>MAMA</Text>
+            <Text style={styles.menuText}>{t.mama}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -616,13 +634,13 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.row}>
             <Ionicons name="moon" size={22} color="#FFF" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.activeSleepTitle}>{babyName} doarme 🌙</Text>
+              <Text style={styles.activeSleepTitle}>{t.sleeping(babyName)}</Text>
               <Text style={styles.activeSleepSub}>{activeSleepEntry.value}</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.wakeUpBtn} onPress={handleWakeUp}>
             <Ionicons name="sunny-outline" size={16} color="#2980B9" style={{ marginRight: 4 }} />
-            <Text style={styles.wakeUpBtnText}>S-a trezit!</Text>
+            <Text style={styles.wakeUpBtnText}>{t.wakeUp}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -681,24 +699,24 @@ export default function HomeScreen({ navigation }) {
           }
         >
           {filteredEntries.length === 0 ? (
-            <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>Nu există activități.</Text>
+            <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>{t.noActivity}</Text>
           ) : (
             filteredEntries.map((item, index) => {
               const itemKey = `entry_${index}_${item.id || index}`;
               const formattedDate = cleanDate(item.date);
               const formattedTime = cleanTime(item.time);
               const dateTimeCombined = `${formattedDate} ${formattedTime}`.trim();
-              const isSleep = item.type === 'sleep';
+              const isSleep = String(item.type || '').toLowerCase() === 'sleep';
 
               return (
                 <TouchableOpacity
                   key={itemKey}
                   style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
                   onLongPress={() => {
-                    Alert.alert('Acțiune Înregistrare', 'Ce dorești să faci?', [
-                      { text: 'Anulează', style: 'cancel' },
-                      { text: 'Editează', onPress: () => handleOpenEditModal(item) },
-                      { text: 'Șterge', style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
+                    Alert.alert(t.actionTitle, t.actionSub, [
+                      { text: t.cancel, style: 'cancel' },
+                      { text: t.edit, onPress: () => handleOpenEditModal(item) },
+                      { text: t.delete, style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
                     ]);
                   }}
                 >
@@ -706,7 +724,7 @@ export default function HomeScreen({ navigation }) {
                     {renderIconForType(item.type)}
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
-                        {item.type ? item.type.toUpperCase() : 'ACTIVITATE'}
+                        {translateType(item.type)}
                       </Text>
                       <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>{dateTimeCombined}</Text>
                     </View>
@@ -730,12 +748,12 @@ export default function HomeScreen({ navigation }) {
       <Modal visible={editModalVisible} animationType="slide" transparent={true}>
         <View style={[styles.modalOverlay, { backgroundColor: currentTheme.modalOverlay }]}>
           <View style={[styles.modalContent, { backgroundColor: currentTheme.modalBackground }]}>
-            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>Editează Înregistrarea</Text>
+            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>{t.editTitle}</Text>
             <TextInput
               style={[styles.modalInput, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
               value={editedValue}
               onChangeText={setEditedValue}
-              placeholder="Modifică valoarea..."
+              placeholder={t.editPlaceholder}
               placeholderTextColor={currentTheme.inputPlaceholder}
             />
             <View style={styles.modalButtonsRow}>
@@ -743,13 +761,13 @@ export default function HomeScreen({ navigation }) {
                 style={[styles.modalBtn, { backgroundColor: '#95A5A6' }]}
                 onPress={() => setEditModalVisible(false)}
               >
-                <Text style={styles.buttonText}>Anulează</Text>
+                <Text style={styles.buttonText}>{t.cancel}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, { backgroundColor: '#27AE60', marginLeft: 8 }]}
                 onPress={handleConfirmEdit}
               >
-                <Text style={styles.buttonText}>Salvează</Text>
+                <Text style={styles.buttonText}>{t.save}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -804,7 +822,6 @@ const styles = StyleSheet.create({
 
   menuGridContainer: { marginBottom: 4 },
   menuRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  // Aici am crescut paddingVertical la 12 pentru mai mult spațiu interior
   menuCard: { flex: 1, marginHorizontal: 3, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1 },
   menuText: { color: '#FFF', fontWeight: 'bold', marginTop: 4, fontSize: 12 },
 
@@ -813,6 +830,7 @@ const styles = StyleSheet.create({
   activeSleepSub: { color: '#EBF5FB', fontSize: 12, marginTop: 1 },
   wakeUpBtn: { backgroundColor: '#FFF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
   wakeUpBtnText: { color: '#2980B9', fontWeight: 'bold', fontSize: 12 },
+
   historyList: { flex: 1, marginTop: 2 },
   historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1 },
   historyType: { fontWeight: 'bold', fontSize: 12 },
@@ -820,9 +838,11 @@ const styles = StyleSheet.create({
   valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center' },
   historyValue: { fontSize: 13, fontWeight: 'bold', textAlign: 'right' },
   emptyText: { textAlign: 'center', marginTop: 15, fontSize: 13 },
+
   sleepDetailsContainer: { alignItems: 'flex-end' },
   sleepDetailRow: { flexDirection: 'row', alignItems: 'center' },
   sleepDetailText: { fontSize: 12, fontWeight: 'bold' },
+
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 15 },
   modalContent: { width: '100%', padding: 15, borderRadius: 10, elevation: 4 },
   modalTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8 },

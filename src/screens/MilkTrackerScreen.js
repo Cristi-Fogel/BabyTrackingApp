@@ -22,10 +22,12 @@ import {
   getStoredSheetUrl,
   sendToSheet,
   getTheme,
+  getLanguage,
   getForceOffline,
 } from '../services/storage';
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
+import { translations } from '../services/translations';
 
 export default function MilkTrackerScreen() {
   const navigation = useNavigation();
@@ -38,15 +40,26 @@ export default function MilkTrackerScreen() {
   const [showPicker, setShowPicker] = useState(false);
 
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
+  const [currentLang, setCurrentLang] = useState('ro');
+
+  const t = translations[currentLang] || translations.ro;
   const quickAmounts = [30, 60, 90, 120, 150, 180, 210];
 
   useEffect(() => {
     let isMounted = true;
-    getTheme().then((themeMode) => {
-      if (isMounted) {
-        setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+    const loadConfig = async () => {
+      try {
+        const themeMode = await getTheme();
+        const langCode = await getLanguage();
+        if (isMounted) {
+          setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+          setCurrentLang(langCode || 'ro');
+        }
+      } catch (e) {
+        console.error(e);
       }
-    });
+    };
+    loadConfig();
     return () => {
       isMounted = false;
     };
@@ -104,20 +117,20 @@ export default function MilkTrackerScreen() {
       handleBack();
     } catch (e) {
       console.error('Eroare la salvare:', e);
-      Alert.alert('Eroare', 'Nu s-a putut salva înregistrarea.');
+      Alert.alert(t.error || 'Eroare', t.saveError || 'Nu s-a putut salva înregistrarea.');
       setIsSubmitting(false);
     }
   };
 
   const sources = [
-    { label: 'Lapte praf', icon: 'baby-carriage' },
-    { label: 'Lapte pompat', icon: 'wine-bottle' },
-    { label: 'Lapte Mix', icon: 'blender' },
-    { label: 'Sân Stâng', icon: 'female' },
-    { label: 'Sân Drept', icon: 'female' },
-    { label: 'Ambii Sâni', icon: 'heart' },
-    { label: 'Lapte praf + Sân Stâng', icon: 'female' },
-    { label: 'Lapte praf + Sân Drept', icon: 'female' },
+    { label: t.milkFormula || 'Lapte praf', icon: 'baby-carriage' },
+    { label: t.milkPumped || 'Lapte pompat', icon: 'wine-bottle' },
+    { label: t.milkMix || 'Lapte Mix', icon: 'blender' },
+    { label: t.leftBreast || 'Sân Stâng', icon: 'female' },
+    { label: t.rightBreast || 'Sân Drept', icon: 'female' },
+    { label: t.bothBreasts || 'Ambii Sâni', icon: 'heart' },
+    { label: t.formulaLeft || 'Lapte praf + Sân Stâng', icon: 'female' },
+    { label: t.formulaRight || 'Lapte praf + Sân Drept', icon: 'female' },
   ];
 
   return (
@@ -142,7 +155,9 @@ export default function MilkTrackerScreen() {
           </TouchableOpacity>
 
           {/* Titlu Sursă / Tip Hrănire alăturat */}
-          <Text style={[styles.sectionTitleInline, { color: currentTheme.textSub }]}>Sursă / Tip Hrănire</Text>
+          <Text style={[styles.sectionTitleInline, { color: currentTheme.textSub }]}>
+            {t.milkSourceTitle || 'Sursă / Tip Hrănire'}
+          </Text>
         </View>
 
         {/* Picker-ul nativ */}
@@ -249,7 +264,7 @@ export default function MilkTrackerScreen() {
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={24} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={styles.confirmBtnText}>Salvează Înregistrarea</Text>
+              <Text style={styles.confirmBtnText}>{t.save || 'Salvează Înregistrarea'}</Text>
             </>
           )}
         </TouchableOpacity>
