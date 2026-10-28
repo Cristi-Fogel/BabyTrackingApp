@@ -148,3 +148,133 @@ export const sendToSheet = async (url, data) => {
     return null;
   }
 };
+
+
+// --- HELPERE GENERICE PENTRU EDITARE ȘI ȘTERGERE ---
+
+/**
+ * Șterge o intrare (trimite o intrare goală cu același ID pe server și o elimină/marchează local)
+ */
+export const deleteEntryById = async (itemId, currentEntries, sheetUrl) => {
+  const targetCleanId = String(itemId || '').replace(/^'/, '').trim();
+  if (!targetCleanId) return currentEntries;
+
+  const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+  const emptyEntry = {
+    id: targetCleanId,
+    date: '',
+    time: '',
+    type: '',
+    value: '',
+    fullDateTime: nowString,
+  };
+
+  // Înlocuim intrarea existentă cu cea goală (pentru anulare)
+  const updatedEntries = currentEntries.map((item) => {
+    const cleanId = String(item.id || '').replace(/^'/, '').trim();
+    return cleanId === targetCleanId ? emptyEntry : item;
+  });
+
+  await saveLocalEntries(updatedEntries);
+
+  if (sheetUrl) {
+    sendToSheet(sheetUrl, emptyEntry).catch((err) => {
+      console.log('Eroare la ștergere în fundal:', err);
+    });
+  }
+
+  return updatedEntries;
+};
+
+/**
+ * Actualizează valoarea unei intrări existente (înlocuiește elementul cu același ID)
+ */
+export const updateEntryValue = async (itemToEdit, newValue, currentEntries, sheetUrl) => {
+  if (!itemToEdit) return currentEntries;
+
+  const cleanTargetId = String(itemToEdit.id || '').replace(/^'/, '').trim();
+  const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+  const updatedEntry = {
+    ...itemToEdit,
+    id: cleanTargetId,
+    value: newValue,
+    fullDateTime: nowString,
+  };
+
+  // Înlocuim elementul existent în loc să adăugăm unul nou
+  const updatedEntries = currentEntries.map((item) => {
+    const cleanId = String(item.id || '').replace(/^'/, '').trim();
+    return cleanId === cleanTargetId ? updatedEntry : item;
+  });
+
+  await saveLocalEntries(updatedEntries);
+
+  if (sheetUrl) {
+    sendToSheet(sheetUrl, updatedEntry).catch((err) => {
+      console.log('Eroare la salvarea modificării în fundal:', err);
+    });
+  }
+
+  return updatedEntries;
+};
+
+
+// --- Setări Extinse (Offline & Theme) ---
+
+export const getForceOffline = async () => {
+  try {
+    const val = await AsyncStorage.getItem('@baby_tracker_force_offline');
+    return val !== null ? JSON.parse(val) : false;
+  } catch (e) {
+    console.error('Eroare la citirea setării force_offline:', e);
+    return false;
+  }
+};
+
+export const saveForceOffline = async (enabled) => {
+  try {
+    await AsyncStorage.setItem('@baby_tracker_force_offline', JSON.stringify(enabled));
+  } catch (e) {
+    console.error('Eroare la salvarea setării force_offline:', e);
+  }
+};
+
+export const getTheme = async () => {
+  try {
+    const val = await AsyncStorage.getItem('@baby_tracker_theme');
+    return val || 'default';
+  } catch (e) {
+    console.error('Eroare la citirea temei:', e);
+    return 'default';
+  }
+};
+
+export const saveTheme = async (theme) => {
+  try {
+    await AsyncStorage.setItem('@baby_tracker_theme', theme);
+  } catch (e) {
+    console.error('Eroare la salvarea temei:', e);
+  }
+};
+
+// Adaugă în storage.js:
+const LANGUAGE_KEY = '@baby_tracker_language';
+
+export async function getLanguage() {
+  try {
+    const lang = await AsyncStorage.getItem(LANGUAGE_KEY);
+    return lang || 'ro'; // Default română
+  } catch (e) {
+    return 'ro';
+  }
+}
+
+export async function saveLanguage(lang) {
+  try {
+    await AsyncStorage.setItem(LANGUAGE_KEY, lang);
+  } catch (e) {
+    console.error('Eroare la salvarea limbii:', e);
+  }
+}

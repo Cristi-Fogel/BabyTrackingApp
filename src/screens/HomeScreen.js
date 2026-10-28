@@ -24,7 +24,13 @@ import {
   sendToSheet,
   getBabyName,
   getDropsEnabled,
+  getForceOffline,
+  getTheme,
+  deleteEntryById,
+  updateEntryValue,
 } from '../services/storage';
+import { lightTheme } from '../theme/lightTheme';
+import { darkTheme } from '../theme/darkTheme';
 
 export default function HomeScreen({ navigation }) {
   const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwWQ7UAaX_5fi1GT9nyNmpM5xZbUvVeZ2AY_mISSk7ANXoFSC6Y3Jq37y_EB5Fs4Toa3Q/exec';
@@ -35,6 +41,13 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [babyName, setBabyName] = useState('Bebelușul');
   const [dropsEnabled, setDropsEnabled] = useState(false);
+
+  // Stări pentru Offline real și Temă
+  const [isOffline, setIsOffline] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState(lightTheme);
+
+  // Stare pentru Filtru Istoric ('all', 'milk', 'sleep', 'growth', 'mama')
+  const [filterType, setFilterType] = useState('all');
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentEditingItem, setCurrentEditingItem] = useState(null);
@@ -100,6 +113,8 @@ export default function HomeScreen({ navigation }) {
           const localData = await getLocalEntries();
           const savedBabyName = await getBabyName();
           const savedDropsEnabled = await getDropsEnabled();
+          const forcedOffline = await getForceOffline();
+          const themeMode = await getTheme();
 
           const safeLocal = Array.isArray(localData) ? localData : [];
 
@@ -107,6 +122,14 @@ export default function HomeScreen({ navigation }) {
             setEntries(safeLocal);
             if (savedBabyName) setBabyName(savedBabyName);
             setDropsEnabled(savedDropsEnabled);
+            setIsOffline(forcedOffline);
+            setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+          }
+
+          if (forcedOffline) {
+            setLoading(false);
+            isSyncingRef.current = false;
+            return;
           }
 
           const activeUrl = savedUrl || DEFAULT_SHEET_URL;
@@ -138,10 +161,21 @@ export default function HomeScreen({ navigation }) {
 
   const performSync = async (targetUrl, currentLocalEntries = [], isDropsOn = false) => {
     if (!targetUrl) return;
+
+    const forcedOffline = await getForceOffline();
+    if (forcedOffline) {
+      setIsOffline(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const remoteEntries = await fetchFromSheet(targetUrl);
-      if (!Array.isArray(remoteEntries) || remoteEntries.length === 0) return;
+      if (!Array.isArray(remoteEntries) || remoteEntries.length === 0) {
+        return;
+      }
+
+      setIsOffline(false);
 
       let cleanRemote = remoteEntries
         .map((item) => ({
@@ -225,6 +259,7 @@ export default function HomeScreen({ navigation }) {
       await saveLocalEntries(cleanRemote);
     } catch (e) {
       console.log('Sincronizare eșuată sau offline:', e);
+      setIsOffline(true);
     } finally {
       setLoading(false);
     }
@@ -269,7 +304,8 @@ export default function HomeScreen({ navigation }) {
       setEntries(updatedEntries);
       await saveLocalEntries(updatedEntries);
 
-      if (sheetUrl) {
+      const forcedOffline = await getForceOffline();
+      if (sheetUrl && !forcedOffline) {
         sendToSheet(sheetUrl, updatedDropsEntry).catch((err) => {
           console.log('Eroare sincronizare fundal drops:', err);
         });
@@ -305,7 +341,7 @@ export default function HomeScreen({ navigation }) {
   sortedRawEntries.forEach((item) => {
     if (item && item.id) {
       const cleanType = String(item.type || '').toLowerCase();
-      if (cleanType === 'alaptare' || cleanType === 'drops') return;
+      if (cleanType === 'drops') return;
 
       const cleanId = String(item.id).replace(/^'/, '').trim();
       const val = String(item.value || '').trim();
@@ -318,13 +354,25 @@ export default function HomeScreen({ navigation }) {
     }
   });
 
-  const sortedEntries = Array.from(entriesMap.values()).sort((a, b) => {
+  const allUniqueEntries = Array.from(entriesMap.values()).sort((a, b) => {
     const timeA = a.fullDateTime || a.id || '';
     const timeB = b.fullDateTime || b.id || '';
     return timeB.localeCompare(timeA);
   });
 
-  // --- LOGICĂ PICĂTURI ZILNICE NORMALIZATĂ ---
+  // --- LOGICĂ FILTRARE ---
+  const filteredEntries = allUniqueEntries.filter((item) => {
+    const t = String(item.type || '').toLowerCase();
+    if (filterType === 'all') {
+      return t !== 'mama' && t !== 'alaptare';
+    }
+    if (filterType === 'milk') return t === 'milk' || t === 'lapte';
+    if (filterType === 'sleep') return t === 'sleep';
+    if (filterType === 'growth') return t === 'growth' || t === 'crestere';
+    if (filterType === 'mama') return t === 'mama' || t === 'alaptare';
+    return true;
+  });
+
   const todayStr = getTodayDateString();
 
   const todayDropsItems = safeEntries.filter((item) => {
@@ -341,9 +389,8 @@ export default function HomeScreen({ navigation }) {
   });
 
   const showDropsBanner = dropsEnabled && !hasBeenAdministeredToday;
-  // ---------------------------------------------
 
-  const sleepEntries = sortedEntries.filter((item) => item && item.type === 'sleep' && item.value);
+  const sleepEntries = allUniqueEntries.filter((item) => item && item.type === 'sleep' && item.value);
   const latestSleep = sleepEntries[0];
   const activeSleepEntry =
     latestSleep &&
@@ -381,7 +428,8 @@ export default function HomeScreen({ navigation }) {
       setEntries(updatedEntries);
       await saveLocalEntries(updatedEntries);
 
-      if (sheetUrl) {
+      const forcedOffline = await getForceOffline();
+      if (sheetUrl && !forcedOffline) {
         await sendToSheet(sheetUrl, updatedEntry);
       }
     } catch (e) {
@@ -391,37 +439,10 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleDeleteEntry = (itemId) => {
-    Alert.alert('Confirmare Ștergere', 'Sigur dorești să ștergi această activitate?', [
-      { text: 'Anulează', style: 'cancel' },
-      {
-        text: 'Șterge',
-        style: 'destructive',
-        onPress: async () => {
-          const targetCleanId = String(itemId || '').replace(/^'/, '').trim();
-          if (!targetCleanId) return;
-
-          const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-          const emptyEntry = {
-            id: targetCleanId,
-            date: '',
-            time: '',
-            type: '',
-            value: '',
-            fullDateTime: nowString,
-          };
-
-          const updatedEntries = [...safeEntries, emptyEntry];
-          setEntries(updatedEntries);
-          await saveLocalEntries(updatedEntries);
-
-          if (sheetUrl) {
-            await sendToSheet(sheetUrl, emptyEntry);
-          }
-        },
-      },
-    ]);
+  const handleDeleteEntry = async (itemId) => {
+    const forcedOffline = await getForceOffline();
+    const updated = await deleteEntryById(itemId, entries, forcedOffline ? null : sheetUrl);
+    setEntries(updated);
   };
 
   const handleOpenEditModal = (item) => {
@@ -430,39 +451,17 @@ export default function HomeScreen({ navigation }) {
     setEditModalVisible(true);
   };
 
-  const handleConfirmEdit = () => {
-    Alert.alert('Confirmare Modificare', 'Dorești să salvezi modificările?', [
-      { text: 'Anulează', style: 'cancel' },
-      {
-        text: 'Salvează',
-        onPress: async () => {
-          if (!currentEditingItem) return;
-          const cleanId = String(currentEditingItem.id).replace(/^'/, '').trim();
-          const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-          const updatedEntry = {
-            ...currentEditingItem,
-            id: cleanId,
-            value: editedValue,
-            fullDateTime: nowString,
-          };
-
-          const updatedEntries = [...safeEntries, updatedEntry];
-          setEntries(updatedEntries);
-          await saveLocalEntries(updatedEntries);
-          setEditModalVisible(false);
-          setCurrentEditingItem(null);
-
-          if (sheetUrl) {
-            await sendToSheet(sheetUrl, updatedEntry);
-          }
-        },
-      },
-    ]);
+  const handleConfirmEdit = async () => {
+    if (!currentEditingItem) return;
+    const forcedOffline = await getForceOffline();
+    const updated = await updateEntryValue(currentEditingItem, editedValue, entries, forcedOffline ? null : sheetUrl);
+    setEntries(updated);
+    setEditModalVisible(false);
+    setCurrentEditingItem(null);
   };
 
   const renderSleepDetails = (value) => {
-    if (!value) return <Text style={styles.historyValue}>-</Text>;
+    if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>-</Text>;
     const sleepMatch = value.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
     const wakeMatch = value.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
     const sleepTime = sleepMatch ? sleepMatch[1].trim() : '';
@@ -473,74 +472,78 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.sleepDetailsContainer}>
           {sleepTime ? (
             <View style={styles.sleepDetailRow}>
-              <Ionicons name="moon-outline" size={15} color="#2980B9" style={{ marginRight: 4 }} />
-              <Text style={styles.sleepDetailText}>{sleepTime}</Text>
+              <Ionicons name="moon-outline" size={13} color="#2980B9" style={{ marginRight: 3 }} />
+              <Text style={[styles.sleepDetailText, { color: currentTheme.textMain }]}>{sleepTime}</Text>
             </View>
           ) : null}
           {wakeTime ? (
-            <View style={[styles.sleepDetailRow, { marginTop: 3 }]}>
-              <Ionicons name="sunny-outline" size={15} color="#E67E22" style={{ marginRight: 4 }} />
-              <Text style={styles.sleepDetailText}>{wakeTime}</Text>
+            <View style={[styles.sleepDetailRow, { marginTop: 2 }]}>
+              <Ionicons name="sunny-outline" size={13} color="#E67E22" style={{ marginRight: 3 }} />
+              <Text style={[styles.sleepDetailText, { color: currentTheme.textMain }]}>{wakeTime}</Text>
             </View>
           ) : null}
         </View>
       );
     }
-    return <Text style={styles.historyValue}>{value}</Text>;
+    return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{value}</Text>;
   };
 
   const renderIconForType = (type) => {
     const cleanType = String(type || '').toLowerCase();
     if (cleanType === 'milk' || cleanType === 'lapte') {
-      return <FontAwesome5 name="wine-bottle" size={18} color="#D35400" style={{ marginRight: 12 }} />;
+      return <FontAwesome5 name="wine-bottle" size={16} color="#D35400" style={{ marginRight: 8 }} />;
     }
     if (cleanType === 'growth' || cleanType === 'crestere') {
-      return <MaterialCommunityIcons name="ruler" size={20} color="#27AE60" style={{ marginRight: 12 }} />;
+      return <MaterialCommunityIcons name="ruler" size={18} color="#27AE60" style={{ marginRight: 8 }} />;
     }
-    return <Ionicons name="moon-outline" size={20} color="#2980B9" style={{ marginRight: 12 }} />;
+    if (cleanType === 'mama' || cleanType === 'alaptare') {
+      return <Ionicons name="woman-outline" size={18} color="#D81B60" style={{ marginRight: 8 }} />;
+    }
+    return <Ionicons name="moon-outline" size={18} color="#2980B9" style={{ marginRight: 8 }} />;
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF6F0" translucent={false} />
+    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
+      <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
       {/* Sync Header */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>Google Sheet Sync</Text>
+          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Google Sheet Sync</Text>
           <View style={styles.row}>
-            {loading && <ActivityIndicator size="small" color="#D35400" style={{ marginRight: 10 }} />}
+            {loading && <ActivityIndicator size="small" color={currentTheme.tint} style={{ marginRight: 8 }} />}
             <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-              <Ionicons name="settings-outline" size={22} color="#555" />
+              <Ionicons name="settings-outline" size={20} color={currentTheme.textSub} />
             </TouchableOpacity>
           </View>
         </View>
 
         {!isUrlSaved ? (
-          <View style={styles.row}>
+          <View style={[styles.row, { marginTop: 4 }]}>
             <TextInput
-              style={[styles.input, { flex: 1 }]}
+              style={[styles.input, { flex: 1, backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
               placeholder="Introdu URL WebApp"
+              placeholderTextColor={currentTheme.inputPlaceholder}
               value={sheetUrl}
               onChangeText={setSheetUrl}
               autoCapitalize="none"
             />
-            <TouchableOpacity style={styles.button} onPress={handleSaveUrl}>
+            <TouchableOpacity style={[styles.button, { backgroundColor: currentTheme.tint }]} onPress={handleSaveUrl}>
               <Text style={styles.buttonText}>Salvează</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.rowBetween}>
-            <Text style={styles.statusText} numberOfLines={1}>Conectat: {sheetUrl}</Text>
+          <View style={[styles.rowBetween, { marginTop: 4 }]}>
+            <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>Conectat: {sheetUrl}</Text>
             <View style={styles.row}>
               <TouchableOpacity
                 style={[styles.buttonSmall, { backgroundColor: '#27AE60' }]}
                 onPress={() => performSync(sheetUrl, entries, dropsEnabled)}>
-                <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 4 }} />
+                <Ionicons name="refresh" size={12} color="#FFF" style={{ marginRight: 2 }} />
                 <Text style={styles.buttonText}>Sync</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.buttonSmall, { backgroundColor: '#E67E22', marginLeft: 6 }]}
+                style={[styles.buttonSmall, { backgroundColor: '#E67E22', marginLeft: 4 }]}
                 onPress={handleSwapUrl}>
                 <Text style={styles.buttonText}>Swap</Text>
               </TouchableOpacity>
@@ -549,25 +552,32 @@ export default function HomeScreen({ navigation }) {
         )}
       </View>
 
-      {/* Banner Picături (Zilnic) */}
+      {/* MESAJUL DE LIPSĂ INTERNET */}
+      {isOffline && (
+        <View style={{ backgroundColor: '#ffcccc', padding: 6, marginVertical: 2, borderRadius: 6 }}>
+          <Text style={{ color: '#900', fontWeight: 'bold', fontSize: 11 }}>⚠️ Fără internet / Sincronizare oprită.</Text>
+        </View>
+      )}
+
+      {/* Banner Picături */}
       {showDropsBanner && (
         <View style={styles.dropsCard}>
           <View style={styles.row}>
-            <Ionicons name="medkit-outline" size={26} color="#FFF" style={{ marginRight: 10 }} />
+            <Ionicons name="medkit-outline" size={22} color="#FFF" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.dropsTitle}>Nu uita de picături! 💧</Text>
-              <Text style={styles.dropsSub}>Nu au fost administrate astăzi pentru {babyName}.</Text>
+              <Text style={styles.dropsSub}>Nu s-au administrat astăzi pentru {babyName}.</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.dropsBtn} onPress={handleAdministerDrops}>
-            <Ionicons name="checkmark-circle-outline" size={18} color="#27AE60" style={{ marginRight: 6 }} />
+            <Ionicons name="checkmark-circle-outline" size={16} color="#27AE60" style={{ marginRight: 4 }} />
             <Text style={styles.dropsBtnText}>Le-am administrat</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Meniu Navigare */}
-      <Text style={styles.sectionHeader}>Meniu Activități</Text>
+      {/* Meniu Navigare (Cu padding mărit și mai aerisit) */}
+      <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>Meniu Activități</Text>
       <View style={styles.menuGridContainer}>
         <View style={styles.menuRow}>
           <TouchableOpacity
@@ -584,7 +594,7 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.menuRow, { marginTop: 6 }]}>
+        <View style={[styles.menuRow, { marginTop: 8 }]}>
           <TouchableOpacity
             style={[styles.menuCard, { backgroundColor: '#27AE60' }]}
             onPress={() => navigation.navigate('GrowthTracker')}>
@@ -604,22 +614,59 @@ export default function HomeScreen({ navigation }) {
       {activeSleepEntry && (
         <View style={styles.activeSleepCard}>
           <View style={styles.row}>
-            <Ionicons name="moon" size={28} color="#FFF" style={{ marginRight: 10 }} />
+            <Ionicons name="moon" size={22} color="#FFF" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.activeSleepTitle}>{babyName} doarme 🌙</Text>
               <Text style={styles.activeSleepSub}>{activeSleepEntry.value}</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.wakeUpBtn} onPress={handleWakeUp}>
-            <Ionicons name="sunny-outline" size={20} color="#2980B9" style={{ marginRight: 6 }} />
+            <Ionicons name="sunny-outline" size={16} color="#2980B9" style={{ marginRight: 4 }} />
             <Text style={styles.wakeUpBtnText}>S-a trezit!</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Zona Istoric */}
-      <View style={[styles.card, { flex: 1, marginTop: 6 }]}>
-        <Text style={styles.cardTitle}>Istoric Activități ({sortedEntries.length})</Text>
+      {/* Zona Istoric cu Filtre Bazate pe Iconițe */}
+      <View style={[styles.card, { flex: 1, marginTop: 4, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+
+        {/* Rând Filtre cu Iconițe (Compact) */}
+        <View style={styles.filterRowContainer}>
+          <TouchableOpacity
+            style={[styles.filterIconChip, filterType === 'all' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
+            onPress={() => setFilterType('all')}
+          >
+            <Ionicons name="apps-outline" size={18} color={filterType === 'all' ? '#FFF' : currentTheme.textSub} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterIconChip, filterType === 'milk' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
+            onPress={() => setFilterType('milk')}
+          >
+            <FontAwesome5 name="wine-bottle" size={16} color={filterType === 'milk' ? '#FFF' : '#D35400'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterIconChip, filterType === 'sleep' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
+            onPress={() => setFilterType('sleep')}
+          >
+            <Ionicons name="moon-outline" size={18} color={filterType === 'sleep' ? '#FFF' : '#2980B9'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
+            onPress={() => setFilterType('growth')}
+          >
+            <MaterialCommunityIcons name="ruler" size={18} color={filterType === 'growth' ? '#FFF' : '#27AE60'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterIconChip, filterType === 'mama' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
+            onPress={() => setFilterType('mama')}
+          >
+            <Ionicons name="woman-outline" size={18} color={filterType === 'mama' ? '#FFF' : '#D81B60'} />
+          </TouchableOpacity>
+        </View>
 
         <ScrollView
           style={styles.historyList}
@@ -628,15 +675,15 @@ export default function HomeScreen({ navigation }) {
             <RefreshControl
               refreshing={loading}
               onRefresh={() => performSync(sheetUrl, entries, dropsEnabled)}
-              colors={['#D35400']}
-              tintColor="#D35400"
+              colors={[currentTheme.tint]}
+              tintColor={currentTheme.tint}
             />
           }
         >
-          {sortedEntries.length === 0 ? (
-            <Text style={styles.emptyText}>Nu există activități înregistrate.</Text>
+          {filteredEntries.length === 0 ? (
+            <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>Nu există activități.</Text>
           ) : (
-            sortedEntries.map((item, index) => {
+            filteredEntries.map((item, index) => {
               const itemKey = `entry_${index}_${item.id || index}`;
               const formattedDate = cleanDate(item.date);
               const formattedTime = cleanTime(item.time);
@@ -646,7 +693,7 @@ export default function HomeScreen({ navigation }) {
               return (
                 <TouchableOpacity
                   key={itemKey}
-                  style={styles.historyItem}
+                  style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
                   onLongPress={() => {
                     Alert.alert('Acțiune Înregistrare', 'Ce dorești să faci?', [
                       { text: 'Anulează', style: 'cancel' },
@@ -655,13 +702,13 @@ export default function HomeScreen({ navigation }) {
                     ]);
                   }}
                 >
-                  <View style={[styles.row, { flex: 1, marginRight: 10 }]}>
+                  <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
                     {renderIconForType(item.type)}
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.historyType}>
+                      <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
                         {item.type ? item.type.toUpperCase() : 'ACTIVITATE'}
                       </Text>
-                      <Text style={styles.historyDateTime}>{dateTimeCombined}</Text>
+                      <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>{dateTimeCombined}</Text>
                     </View>
                   </View>
 
@@ -669,7 +716,7 @@ export default function HomeScreen({ navigation }) {
                     {isSleep ? (
                       renderSleepDetails(item.value)
                     ) : (
-                      <Text style={styles.historyValue}>{item.value || '-'}</Text>
+                      <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{item.value || '-'}</Text>
                     )}
                   </View>
                 </TouchableOpacity>
@@ -681,14 +728,15 @@ export default function HomeScreen({ navigation }) {
 
       {/* Modal Editare */}
       <Modal visible={editModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editează Înregistrarea</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: currentTheme.modalOverlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.modalBackground }]}>
+            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>Editează Înregistrarea</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
               value={editedValue}
               onChangeText={setEditedValue}
               placeholder="Modifică valoarea..."
+              placeholderTextColor={currentTheme.inputPlaceholder}
             />
             <View style={styles.modalButtonsRow}>
               <TouchableOpacity
@@ -698,7 +746,7 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.buttonText}>Anulează</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#27AE60', marginLeft: 10 }]}
+                style={[styles.modalBtn, { backgroundColor: '#27AE60', marginLeft: 8 }]}
                 onPress={handleConfirmEdit}
               >
                 <Text style={styles.buttonText}>Salvează</Text>
@@ -712,47 +760,73 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F0', paddingHorizontal: 14, paddingBottom: 14, paddingTop: 5 },
-  card: { backgroundColor: '#FFF', padding: 14, borderRadius: 12, marginBottom: 10, elevation: 2 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  sectionHeader: { fontSize: 16, fontWeight: 'bold', color: '#555', marginVertical: 6, marginLeft: 4 },
+  container: { flex: 1, paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2 },
+  card: { padding: 10, borderRadius: 10, marginBottom: 6, elevation: 2, borderWidth: 1 },
+  cardTitle: { fontSize: 14, fontWeight: 'bold' },
+  sectionHeader: { fontSize: 14, fontWeight: 'bold', marginVertical: 4, marginLeft: 2 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 8, marginRight: 8, fontSize: 13 },
-  button: { backgroundColor: '#D35400', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8 },
-  buttonSmall: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
-  buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
-  statusText: { flex: 1, fontSize: 12, color: '#666', marginRight: 8 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 6, padding: 6, marginRight: 6, fontSize: 12 },
+  button: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
+  buttonSmall: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 },
+  buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },
+  statusText: { flex: 1, fontSize: 11, marginRight: 6 },
 
-  dropsCard: { backgroundColor: '#27AE60', padding: 14, borderRadius: 12, marginBottom: 10, elevation: 3 },
-  dropsTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  dropsSub: { color: '#E8F8F5', fontSize: 12, marginTop: 2 },
-  dropsBtn: { backgroundColor: '#FFF', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 8 },
-  dropsBtnText: { color: '#27AE60', fontWeight: 'bold', fontSize: 13 },
+  filterRowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingBottom: 6,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    alignItems: 'center',
+  },
+  filterIconChip: {
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    marginHorizontal: 3,
+    backgroundColor: 'transparent',
+  },
+  filterIconChipActive: {
+    backgroundColor: '#D35400',
+    borderColor: '#D35400',
+  },
 
-  menuGridContainer: { marginBottom: 8 },
+  dropsCard: { backgroundColor: '#27AE60', padding: 10, borderRadius: 10, marginBottom: 6, elevation: 2 },
+  dropsTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  dropsSub: { color: '#E8F8F5', fontSize: 11, marginTop: 1 },
+  dropsBtn: { backgroundColor: '#FFF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
+  dropsBtnText: { color: '#27AE60', fontWeight: 'bold', fontSize: 12 },
+
+  menuGridContainer: { marginBottom: 4 },
   menuRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  menuCard: { flex: 1, marginHorizontal: 3, paddingVertical: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 2 },
-  menuText: { color: '#FFF', fontWeight: 'bold', marginTop: 2, fontSize: 12 },
-  activeSleepCard: { backgroundColor: '#2980B9', padding: 14, borderRadius: 12, marginBottom: 10, elevation: 3 },
-  activeSleepTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  activeSleepSub: { color: '#EBF5FB', fontSize: 13, marginTop: 2 },
-  wakeUpBtn: { backgroundColor: '#FFF', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 8 },
-  wakeUpBtnText: { color: '#2980B9', fontWeight: 'bold', fontSize: 13 },
-  historyList: { flex: 1, marginTop: 4 },
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5ECE1' },
-  historyType: { fontWeight: 'bold', fontSize: 14, color: '#2C3E50' },
-  historyDateTime: { fontSize: 11, color: '#7F8C8D', marginTop: 2, fontWeight: '500' },
+  // Aici am crescut paddingVertical la 12 pentru mai mult spațiu interior
+  menuCard: { flex: 1, marginHorizontal: 3, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1 },
+  menuText: { color: '#FFF', fontWeight: 'bold', marginTop: 4, fontSize: 12 },
+
+  activeSleepCard: { backgroundColor: '#2980B9', padding: 10, borderRadius: 10, marginBottom: 6, elevation: 2 },
+  activeSleepTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  activeSleepSub: { color: '#EBF5FB', fontSize: 12, marginTop: 1 },
+  wakeUpBtn: { backgroundColor: '#FFF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
+  wakeUpBtnText: { color: '#2980B9', fontWeight: 'bold', fontSize: 12 },
+  historyList: { flex: 1, marginTop: 2 },
+  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1 },
+  historyType: { fontWeight: 'bold', fontSize: 12 },
+  historyDateTime: { fontSize: 10, marginTop: 1, fontWeight: '500' },
   valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center' },
-  historyValue: { fontSize: 14, fontWeight: 'bold', color: '#D35400', textAlign: 'right' },
-  emptyText: { textAlign: 'center', color: '#999', marginTop: 20 },
+  historyValue: { fontSize: 13, fontWeight: 'bold', textAlign: 'right' },
+  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 13 },
   sleepDetailsContainer: { alignItems: 'flex-end' },
   sleepDetailRow: { flexDirection: 'row', alignItems: 'center' },
-  sleepDetailText: { fontSize: 13, fontWeight: 'bold', color: '#2C3E50' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', width: '100%', padding: 20, borderRadius: 12, elevation: 5 },
-  modalTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 12 },
-  modalInput: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 10, fontSize: 14, marginBottom: 16 },
+  sleepDetailText: { fontSize: 12, fontWeight: 'bold' },
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 15 },
+  modalContent: { width: '100%', padding: 15, borderRadius: 10, elevation: 4 },
+  modalTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8 },
+  modalInput: { borderWidth: 1, borderRadius: 6, padding: 8, fontSize: 13, marginBottom: 12 },
   modalButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end' },
-  modalBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
+  modalBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
 });

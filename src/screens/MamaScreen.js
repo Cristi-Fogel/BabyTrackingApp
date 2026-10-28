@@ -11,9 +11,11 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   getLocalEntries,
   saveLocalEntries,
@@ -21,18 +23,32 @@ import {
   saveSheetUrl,
   fetchFromSheet,
   sendToSheet,
+  deleteEntryById,
+  updateEntryValue,
+  getTheme,
 } from '../services/storage';
+import { lightTheme } from '../theme/lightTheme';
+import { darkTheme } from '../theme/darkTheme';
 
 export default function MamaScreen({ navigation }) {
   const [sheetUrl, setSheetUrl] = useState('');
   const [isUrlSaved, setIsUrlSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Stări formular Alăptare
-  const [time, setTime] = useState('');
+  // Stare pentru temă
+  const [currentTheme, setCurrentTheme] = useState(lightTheme);
+
+  // Stări formular Alăptare & DateTimePicker nativ
+  const [date, setDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
   const [amount, setAmount] = useState(30); // Implicit 30 ml
   const [side, setSide] = useState('Amândoi'); // Stâng / Drept / Amândoi
   const [entries, setEntries] = useState([]);
+
+  // Stări pentru Modalul de Editare
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [currentEditingItem, setCurrentEditingItem] = useState(null);
+  const [editedValue, setEditedValue] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -42,16 +58,16 @@ export default function MamaScreen({ navigation }) {
         try {
           const url = await getStoredSheetUrl();
           const local = await getLocalEntries();
+          const themeMode = await getTheme();
 
           if (isMounted) {
             setEntries(local || []);
+            setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
             if (url) {
               setSheetUrl(url);
               setIsUrlSaved(true);
             }
-            const now = new Date();
-            const timeNow = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            setTime(timeNow);
+            setDate(new Date()); // Resetăm la ora curentă de fiecare dată când intrăm
           }
         } catch (e) {
           console.error(e);
@@ -65,6 +81,15 @@ export default function MamaScreen({ navigation }) {
       };
     }, [])
   );
+
+  const onChangeTime = (event, selectedDate) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(false);
+    }
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
 
   const performSync = async (targetUrl, currentLocalEntries) => {
     if (!targetUrl) return;
@@ -149,13 +174,13 @@ export default function MamaScreen({ navigation }) {
       const day = String(now.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
 
-      const finalTime = time.trim() || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const newEntry = {
         id: Date.now().toString(),
         type: 'alaptare',
         date: dateStr,
-        time: finalTime,
+        time: timeString,
         value: `${amount} ml (${side})`,
       };
 
@@ -171,6 +196,25 @@ export default function MamaScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteEntry = async (itemId) => {
+    const updated = await deleteEntryById(itemId, entries, sheetUrl);
+    setEntries(updated);
+  };
+
+  const handleOpenEdit = (item) => {
+    setCurrentEditingItem(item);
+    setEditedValue(item.value || '');
+    setEditModalVisible(true);
+  };
+
+  const handleConfirmEdit = async () => {
+    if (!currentEditingItem) return;
+    const updated = await updateEntryValue(currentEditingItem, editedValue, entries, sheetUrl);
+    setEntries(updated);
+    setEditModalVisible(false);
+    setCurrentEditingItem(null);
   };
 
   const changeAmount = (delta) => {
@@ -207,9 +251,8 @@ export default function MamaScreen({ navigation }) {
     return timeStr.replace(/'/g, '');
   };
 
-  // Filtrăm DOAR alăptarea, ordonată descrescător după ID / Timestamp (cel mai recent SUS)
   const mamaEntries = (entries || [])
-    .filter((item) => item.type === 'alaptare')
+    .filter((item) => item.type === 'alaptare' && item.value)
     .sort((a, b) => {
       const timeA = parseInt(String(a.id).replace(/^'/, '').trim(), 10) || 0;
       const timeB = parseInt(String(b.id).replace(/^'/, '').trim(), 10) || 0;
@@ -219,26 +262,24 @@ export default function MamaScreen({ navigation }) {
   const presets = [5, 10, 15, 20, 25, 30, 40, 50, 60, 90, 120];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF6F0" translucent={false} />
+    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
+      <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
       {/* 1. Header Google Sheet Sync */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>Google Sheet Sync</Text>
-          <View style={styles.row}>
-            {loading && <ActivityIndicator size="small" color="#D81B60" style={{ marginRight: 8 }} />}
-            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-              <Ionicons name="settings-outline" size={22} color="#555" />
-            </TouchableOpacity>
-          </View>
+          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Google Sheet Sync</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+            <Ionicons name="settings-outline" size={22} color={currentTheme.textSub} />
+          </TouchableOpacity>
         </View>
 
         {!isUrlSaved ? (
-          <View style={styles.row}>
+          <View style={[styles.row, { marginTop: 8 }]}>
             <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Introdu URL WebApp din Google Apps Script"
+              style={[styles.input, { flex: 1, backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+              placeholder="Introdu URL WebApp..."
+              placeholderTextColor={currentTheme.inputPlaceholder}
               value={sheetUrl}
               onChangeText={setSheetUrl}
               autoCapitalize="none"
@@ -248,15 +289,18 @@ export default function MamaScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.rowBetween}>
-            <Text style={styles.statusText} numberOfLines={1}>
-              Conectat: {sheetUrl}
-            </Text>
-            <View style={styles.row}>
+          <View style={[styles.rowBetween, { marginTop: 6 }]}>
+            <View style={{ flex: 1, marginRight: 8, flexDirection: 'row', alignItems: 'center' }}>
+              {loading && <ActivityIndicator size="small" color="#D81B60" style={{ marginRight: 6 }} />}
+              <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>
+                Conectat: {sheetUrl}
+              </Text>
+            </View>
+            <View style={[styles.row, { flexShrink: 0 }]}>
               <TouchableOpacity
                 style={[styles.buttonSmall, { backgroundColor: '#27AE60' }]}
                 onPress={() => performSync(sheetUrl, entries)}>
-                <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 4 }} />
+                <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 2 }} />
                 <Text style={styles.buttonText}>Sync</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -270,36 +314,54 @@ export default function MamaScreen({ navigation }) {
       </View>
 
       {/* 2. Buton de Înapoi la Bebe */}
-      <TouchableOpacity style={styles.backButtonLarge} onPress={() => navigation.navigate('Home')}>
-        <Ionicons name="arrow-back-outline" size={22} color="#D81B60" style={{ marginRight: 8 }} />
-        <Text style={styles.backButtonLargeText}>Înapoi la Bebe 👶</Text>
+      <TouchableOpacity
+        style={[
+          styles.backButtonLarge,
+          {
+            backgroundColor: currentTheme.cardBackground,
+            borderColor: currentTheme.border,
+          },
+        ]}
+        onPress={() => navigation.navigate('Home')}
+      >
+        <Ionicons name="arrow-back-outline" size={20} color={currentTheme.textMain} style={{ marginRight: 8 }} />
+        <Text style={[styles.backButtonLargeText, { color: currentTheme.textMain }]}>
+          Înapoi la Bebe 👶
+        </Text>
       </TouchableOpacity>
 
       {/* 3. Formular Alăptare */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <Text style={styles.sectionHeader}>Înregistrare Alăptare 🤱</Text>
 
-        {/* Câmpul de Oră și Cantitate pe Același Rând */}
         <View style={styles.rowInline}>
-          {/* Câmp Ora */}
+          {/* Selector Oră Nativ (În loc de TextInput) */}
           <View style={styles.timeContainer}>
-            <Text style={styles.labelSmall}>Ora:</Text>
-            <View style={styles.timeInputWrapper}>
+            <Text style={[styles.labelSmall, { color: currentTheme.textSub }]}>Ora:</Text>
+            <TouchableOpacity
+              style={[styles.timeInputWrapper, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
+              onPress={() => setShowPicker(true)}
+            >
               <Ionicons name="time-outline" size={16} color="#D81B60" style={{ marginRight: 4 }} />
-              <TextInput
-                style={styles.timeInputField}
-                value={time}
-                onChangeText={setTime}
-                placeholder="HH:MM"
-                placeholderTextColor="#999"
-              />
-            </View>
+              <Text style={[styles.timeInputField, { color: currentTheme.inputText }]}>
+                {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Control Cantitate (Afișaj + Pas -/+) */}
+          {showPicker && (
+            <DateTimePicker
+              value={date}
+              mode="time"
+              is24Hour={false}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={onChangeTime}
+            />
+          )}
+
           <View style={styles.amountContainer}>
             <View style={styles.rowBetween}>
-              <Text style={styles.labelSmall}>Cantitate:</Text>
+              <Text style={[styles.labelSmall, { color: currentTheme.textSub }]}>Cantitate:</Text>
               <Text style={styles.amountDisplay}>{amount} ml</Text>
             </View>
             <View style={styles.sliderContainer}>
@@ -307,7 +369,7 @@ export default function MamaScreen({ navigation }) {
                 <Ionicons name="remove-circle-outline" size={26} color="#D81B60" />
               </TouchableOpacity>
 
-              <View style={styles.sliderBarBackground}>
+              <View style={[styles.sliderBarBackground, { backgroundColor: currentTheme.sliderBg || currentTheme.border }]}>
                 <View style={[styles.sliderBarFill, { width: `${Math.min(100, (amount / 200) * 100)}%` }]} />
               </View>
 
@@ -318,7 +380,6 @@ export default function MamaScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Scroll Preset-uri Cantități */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -326,23 +387,31 @@ export default function MamaScreen({ navigation }) {
           {presets.map((val) => (
             <TouchableOpacity
               key={val}
-              style={[styles.presetChip, amount === val && styles.presetChipActive]}
+              style={[
+                styles.presetChip,
+                { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border },
+                amount === val && styles.presetChipActive,
+              ]}
               onPress={() => setAmount(val)}>
-              <Text style={[styles.presetText, amount === val && styles.presetTextActive]}>
+              <Text style={[styles.presetText, { color: currentTheme.textSub }, amount === val && styles.presetTextActive]}>
                 {val} ml
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        <Text style={[styles.label, { marginTop: 8 }]}>Sân:</Text>
+        <Text style={[styles.label, { color: currentTheme.textSub }]}>Sân:</Text>
         <View style={styles.row}>
           {['Stâng', 'Drept', 'Amândoi'].map((item) => (
             <TouchableOpacity
               key={item}
-              style={[styles.optionBtn, side === item && styles.optionBtnActive]}
+              style={[
+                styles.optionBtn,
+                { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border },
+                side === item && styles.optionBtnActive,
+              ]}
               onPress={() => setSide(item)}>
-              <Text style={[styles.optionText, side === item && styles.optionTextActive]}>
+              <Text style={[styles.optionText, { color: currentTheme.textSub }, side === item && styles.optionTextActive]}>
                 {item}
               </Text>
             </TouchableOpacity>
@@ -362,12 +431,12 @@ export default function MamaScreen({ navigation }) {
       </View>
 
       {/* 4. Istoric MAMA */}
-      <View style={[styles.card, { flex: 1 }]}>
-        <Text style={styles.cardTitle}>Istoric Alăptare ({mamaEntries.length})</Text>
+      <View style={[styles.card, { flex: 1, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+        <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>Istoric Alăptare ({mamaEntries.length})</Text>
 
         <ScrollView style={{ flex: 1, marginTop: 8 }}>
           {mamaEntries.length === 0 ? (
-            <Text style={styles.emptyText}>Nu există înregistrări de alăptare.</Text>
+            <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>Nu există înregistrări de alăptare.</Text>
           ) : (
             mamaEntries.map((item, index) => {
               const formattedDate = cleanDate(item.date);
@@ -375,21 +444,61 @@ export default function MamaScreen({ navigation }) {
               const dateTimeDisplay = `${formattedDate} ${formattedTime}`.trim();
 
               return (
-                <View key={`mama_${index}_${item.id}`} style={styles.historyItem}>
+                <TouchableOpacity
+                  key={`mama_${index}_${item.id}`}
+                  style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
+                  onLongPress={() => {
+                    Alert.alert('Opțiuni Înregistrare', 'Alege o acțiune:', [
+                      { text: 'Anulează', style: 'cancel' },
+                      { text: 'Editează', onPress: () => handleOpenEdit(item) },
+                      { text: 'Șterge', style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
+                    ]);
+                  }}
+                >
                   <View style={styles.row}>
                     <Ionicons name="woman-outline" size={20} color="#D81B60" style={{ marginRight: 10 }} />
                     <View>
-                      <Text style={styles.historyType}>ALĂPTARE</Text>
-                      <Text style={styles.historyDateTime}>{dateTimeDisplay}</Text>
+                      <Text style={[styles.historyType, { color: currentTheme.textMain }]}>ALĂPTARE</Text>
+                      <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>{dateTimeDisplay}</Text>
                     </View>
                   </View>
                   <Text style={styles.historyValue}>{item.value}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
         </ScrollView>
       </View>
+
+      {/* Modal Editare */}
+      <Modal visible={editModalVisible} animationType="slide" transparent={true}>
+        <View style={[styles.modalOverlay, { backgroundColor: currentTheme.modalOverlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.modalBackground }]}>
+            <Text style={[styles.modalTitle, { color: currentTheme.textMain }]}>Editează Înregistrarea</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+              value={editedValue}
+              onChangeText={setEditedValue}
+              placeholder="Modifică valoarea..."
+              placeholderTextColor={currentTheme.inputPlaceholder}
+            />
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#95A5A6' }]}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Anulează</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#27AE60', marginLeft: 10 }]}
+                onPress={handleConfirmEdit}
+              >
+                <Text style={styles.buttonText}>Salvează</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -397,18 +506,17 @@ export default function MamaScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF6F0',
     paddingHorizontal: 14,
     paddingBottom: 14,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 20,
   },
-  card: { backgroundColor: '#FFF', padding: 14, borderRadius: 12, marginBottom: 10, elevation: 2 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  card: { padding: 14, borderRadius: 12, marginBottom: 10, elevation: 2, borderWidth: 1 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold' },
   sectionHeader: { fontSize: 16, fontWeight: 'bold', color: '#D81B60', marginBottom: 10 },
   row: { flexDirection: 'row', alignItems: 'center' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statusText: { flex: 1, fontSize: 12, color: '#666', marginRight: 8 },
-  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, padding: 8, marginRight: 8, fontSize: 13 },
+  statusText: { flex: 1, fontSize: 12, marginRight: 8 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 8, marginRight: 8, fontSize: 13 },
   button: { backgroundColor: '#D35400', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8 },
   buttonSmall: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
   buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
@@ -417,22 +525,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FADBD8',
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#F5B7B1',
     elevation: 1,
   },
   backButtonLargeText: {
-    color: '#D81B60',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 14,
   },
 
-  // Rând combinat Oră + Cantitate
   rowInline: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -446,46 +550,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#DDD',
     borderRadius: 8,
     paddingHorizontal: 6,
-    backgroundColor: '#FAFAFA',
     height: 38,
+    justifyContent: 'center',
   },
   timeInputField: {
-    flex: 1,
     fontSize: 13,
-    color: '#333',
     fontWeight: '600',
-    paddingVertical: 4,
   },
   amountContainer: {
     width: '64%',
   },
-  labelSmall: { fontSize: 12, fontWeight: 'bold', color: '#555', marginBottom: 2 },
-  label: { fontSize: 13, fontWeight: 'bold', color: '#555', marginTop: 4, marginBottom: 4 },
+  labelSmall: { fontSize: 12, fontWeight: 'bold', marginBottom: 2 },
+  label: { fontSize: 13, fontWeight: 'bold', marginTop: 4, marginBottom: 4 },
   amountDisplay: { fontSize: 14, fontWeight: 'bold', color: '#D81B60' },
 
   sliderContainer: { flexDirection: 'row', alignItems: 'center' },
   stepBtn: { padding: 1 },
-  sliderBarBackground: { flex: 1, height: 8, backgroundColor: '#F0D0DC', borderRadius: 4, marginHorizontal: 4, overflow: 'hidden' },
+  sliderBarBackground: { flex: 1, height: 8, borderRadius: 4, marginHorizontal: 4, overflow: 'hidden' },
   sliderBarFill: { height: '100%', backgroundColor: '#D81B60', borderRadius: 4 },
 
   presetScrollContainer: { paddingVertical: 6, alignItems: 'center' },
-  presetChip: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: '#DDD', backgroundColor: '#FAFAFA', marginRight: 6 },
+  presetChip: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, marginRight: 6 },
   presetChipActive: { backgroundColor: '#D81B60', borderColor: '#D81B60' },
-  presetText: { fontSize: 12, fontWeight: 'bold', color: '#666' },
+  presetText: { fontSize: 12, fontWeight: 'bold' },
   presetTextActive: { color: '#FFF' },
 
-  optionBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderColor: '#DDD', borderRadius: 8, alignItems: 'center', marginRight: 6 },
+  optionBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginRight: 6 },
   optionBtnActive: { backgroundColor: '#D81B60', borderColor: '#D81B60' },
-  optionText: { fontSize: 13, color: '#555', fontWeight: 'bold' },
+  optionText: { fontSize: 13, fontWeight: 'bold' },
   optionTextActive: { color: '#FFF' },
   saveBtn: { flexDirection: 'row', backgroundColor: '#D81B60', paddingVertical: 10, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F5ECE1' },
-  historyType: { fontWeight: 'bold', fontSize: 14, color: '#2C3E50' },
-  historyDateTime: { fontSize: 12, color: '#7F8C8D', marginTop: 2, fontWeight: '500' },
+  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1 },
+  historyType: { fontWeight: 'bold', fontSize: 14 },
+  historyDateTime: { fontSize: 12, marginTop: 2, fontWeight: '500' },
   historyValue: { fontSize: 14, fontWeight: 'bold', color: '#D81B60' },
-  emptyText: { textAlign: 'center', color: '#999', marginTop: 20 },
+  emptyText: { textAlign: 'center', marginTop: 20 },
+
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { width: '100%', padding: 20, borderRadius: 12, elevation: 5 },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
+  modalInput: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 14, marginBottom: 16 },
+  modalButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  modalBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
 });

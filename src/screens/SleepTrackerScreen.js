@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -15,7 +18,11 @@ import {
   saveLocalEntries,
   getStoredSheetUrl,
   sendToSheet,
+  getTheme,
+  getForceOffline,
 } from '../services/storage';
+import { lightTheme } from '../theme/lightTheme';
+import { darkTheme } from '../theme/darkTheme';
 
 export default function SleepTrackerScreen() {
   const navigation = useNavigation();
@@ -24,6 +31,19 @@ export default function SleepTrackerScreen() {
   );
   const [endTime, setEndTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState(lightTheme);
+
+  useEffect(() => {
+    let isMounted = true;
+    getTheme().then((themeMode) => {
+      if (isMounted) {
+        setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleBack = () => {
     if (navigation && navigation.canGoBack && navigation.canGoBack()) {
@@ -68,12 +88,15 @@ export default function SleepTrackerScreen() {
       const updatedEntries = [newEntry, ...(Array.isArray(currentEntries) ? currentEntries : [])];
       await saveLocalEntries(updatedEntries);
 
-      // 2. Trimitere în Google Sheet dacă există URL
-      const sheetUrl = await getStoredSheetUrl();
-      if (sheetUrl) {
-        const success = await sendToSheet(sheetUrl, newEntry);
-        if (!success) {
-          console.log('Salvat doar local, se va sincroniza ulterior.');
+      // 2. Trimitere în Google Sheet dacă nu e forțat offline
+      const forcedOffline = await getForceOffline();
+      if (!forcedOffline) {
+        const sheetUrl = await getStoredSheetUrl();
+        if (sheetUrl) {
+          const success = await sendToSheet(sheetUrl, newEntry);
+          if (!success) {
+            console.log('Salvat doar local, se va sincroniza ulterior.');
+          }
         }
       }
 
@@ -87,26 +110,35 @@ export default function SleepTrackerScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-        <Ionicons name="arrow-back" size={24} color="#333" />
+    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
+      <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
+
+      <TouchableOpacity style={styles.backBtn} onPress={handleBack} disabled={isSubmitting}>
+        <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
       </TouchableOpacity>
 
-      <Text style={styles.title}>Înregistrare Somn 🌙</Text>
+      <Text style={[styles.title, { color: currentTheme.textMain }]}>Înregistrare Somn 🌙</Text>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Ora adormirii:</Text>
-        <TextInput style={styles.input} value={startTime} onChangeText={setStartTime} />
+        <Text style={[styles.label, { color: currentTheme.textSub }]}>Ora adormirii:</Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+          value={startTime}
+          onChangeText={setStartTime}
+          placeholderTextColor={currentTheme.inputPlaceholder}
+          editable={!isSubmitting}
+        />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Ora trezirii (Opțional):</Text>
+        <Text style={[styles.label, { color: currentTheme.textSub }]}>Ora trezirii (Opțional):</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
           placeholder="Lăsați gol dacă doarme acum"
-          placeholderTextColor="#999"
+          placeholderTextColor={currentTheme.inputPlaceholder}
           value={endTime}
           onChangeText={setEndTime}
+          editable={!isSubmitting}
         />
       </View>
 
@@ -121,17 +153,26 @@ export default function SleepTrackerScreen() {
           <Text style={styles.saveBtnText}>Creează Înregistrare</Text>
         )}
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAF6F0', padding: 20 },
-  backBtn: { marginTop: 30, marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 30 },
+  container: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 10,
+  },
+  backBtn: { marginTop: 10, marginBottom: 20 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 30 },
   inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, color: '#666', marginBottom: 8 },
-  input: { backgroundColor: '#FFF', padding: 14, borderRadius: 12, fontSize: 16, color: '#333' },
+  label: { fontSize: 14, marginBottom: 8, fontWeight: '600' },
+  input: {
+    padding: 14,
+    borderRadius: 12,
+    fontSize: 16,
+    borderWidth: 1,
+  },
   saveBtn: {
     backgroundColor: '#2980B9',
     padding: 16,

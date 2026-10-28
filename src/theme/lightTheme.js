@@ -1,0 +1,16 @@
+export const lightTheme = {
+  background: '#FAF6F0',
+  cardBackground: '#FFF',
+  textMain: '#333',
+  textSub: '#7F8C8D',
+  textSecondary: '#555',
+  border: '#DDD',
+  borderColorLight: '#F5ECE1',
+  tint: '#D35400',
+  statusBar: 'dark-content',
+  modalOverlay: 'rgba(0,0,0,0.5)',
+  modalBackground: '#FFF',
+  inputBackground: '#FFF',
+  inputPlaceholder: '#999',
+  inputText: '#333',
+};

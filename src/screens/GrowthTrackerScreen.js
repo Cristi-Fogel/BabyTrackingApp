@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,13 +18,30 @@ import {
   saveLocalEntries,
   getStoredSheetUrl,
   sendToSheet,
+  getTheme,
+  getForceOffline,
 } from '../services/storage';
+import { lightTheme } from '../theme/lightTheme';
+import { darkTheme } from '../theme/darkTheme';
 
 export default function GrowthTrackerScreen() {
   const navigation = useNavigation();
   const [weight, setWeight] = useState(''); // kg
   const [height, setHeight] = useState(''); // cm
   const [loading, setLoading] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState(lightTheme);
+
+  useEffect(() => {
+    let isMounted = true;
+    getTheme().then((themeMode) => {
+      if (isMounted) {
+        setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleBack = () => {
     if (navigation && navigation.canGoBack && navigation.canGoBack()) {
@@ -71,10 +88,13 @@ export default function GrowthTrackerScreen() {
       const updatedEntries = [newEntry, ...(Array.isArray(currentEntries) ? currentEntries : [])];
       await saveLocalEntries(updatedEntries);
 
-      // 2. AȘTEPTĂM (await) trimiterea în Google Sheet înainte de a naviga înapoi
-      const sheetUrl = await getStoredSheetUrl();
-      if (sheetUrl) {
-        await sendToSheet(sheetUrl, newEntry);
+      // 2. Trimitere în Google Sheet (dacă nu e forțat offline)
+      const forcedOffline = await getForceOffline();
+      if (!forcedOffline) {
+        const sheetUrl = await getStoredSheetUrl();
+        if (sheetUrl) {
+          await sendToSheet(sheetUrl, newEntry);
+        }
       }
 
       handleBack();
@@ -87,24 +107,24 @@ export default function GrowthTrackerScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF6F0" translucent={false} />
+    <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
+      <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
       <TouchableOpacity style={styles.backBtn} onPress={handleBack} disabled={loading}>
-        <Ionicons name="arrow-back" size={24} color="#333" />
+        <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
       </TouchableOpacity>
 
-      <Text style={styles.title}>Creștere & Măsurători 📏</Text>
+      <Text style={[styles.title, { color: currentTheme.textMain }]}>Creștere & Măsurători 📏</Text>
 
-      <View style={styles.inputCard}>
+      <View style={[styles.inputCard, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Greutate (kg):</Text>
-          <View style={styles.inputRow}>
+          <Text style={[styles.label, { color: currentTheme.textSub }]}>Greutate (kg):</Text>
+          <View style={[styles.inputRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}>
             <MaterialCommunityIcons name="scale-bathroom" size={24} color="#27AE60" style={styles.icon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: currentTheme.inputText }]}
               placeholder="ex: 4.5"
-              placeholderTextColor="#999"
+              placeholderTextColor={currentTheme.inputPlaceholder}
               keyboardType="decimal-pad"
               value={weight}
               onChangeText={setWeight}
@@ -114,13 +134,13 @@ export default function GrowthTrackerScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Lungime / Înălțime (cm):</Text>
-          <View style={styles.inputRow}>
+          <Text style={[styles.label, { color: currentTheme.textSub }]}>Lungime / Înălțime (cm):</Text>
+          <View style={[styles.inputRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}>
             <MaterialCommunityIcons name="ruler" size={24} color="#27AE60" style={styles.icon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: currentTheme.inputText }]}
               placeholder="ex: 56"
-              placeholderTextColor="#999"
+              placeholderTextColor={currentTheme.inputPlaceholder}
               keyboardType="decimal-pad"
               value={height}
               onChangeText={setHeight}
@@ -144,18 +164,17 @@ export default function GrowthTrackerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAF6F0',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 10,
   },
   backBtn: { marginTop: 10, marginBottom: 15 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 20 },
-  inputCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, elevation: 2 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  inputCard: { padding: 20, borderRadius: 16, elevation: 2, borderWidth: 1 },
   inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 8 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#DDD', borderRadius: 12, paddingHorizontal: 12 },
+  label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
   icon: { marginRight: 10 },
-  input: { flex: 1, paddingVertical: 12, fontSize: 16, color: '#333' },
+  input: { flex: 1, paddingVertical: 12, fontSize: 16 },
   saveBtn: { backgroundColor: '#27AE60', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 10, elevation: 2 },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 });
