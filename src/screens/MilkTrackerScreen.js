@@ -199,7 +199,7 @@ export default function MilkTrackerScreen() {
           })}
         </View>
 
-        {/* 3. Input cantitate */}
+        {/* 3. Input cantitate clasic (badge central) */}
         <View style={styles.displayBadge}>
           <TextInput
             style={styles.amountInput}
@@ -239,18 +239,36 @@ export default function MilkTrackerScreen() {
           ))}
         </View>
 
-        {/* 5. Slider cantitate */}
-        <View style={styles.sliderContainer}>
-          <Slider
-            value={typeof amount === 'number' ? amount : 0}
-            onValueChange={(val) => setAmount(Array.isArray(val) ? val[0] : val)}
-            minimumValue={10}
-            maximumValue={300}
-            step={5}
-            minimumTrackTintColor="#D35400"
-            thumbTintColor="#D35400"
-            maximumTrackTintColor={currentTheme.border}
-          />
+        {/* 5. Slider cantitate încadrat de butoanele -5 și +5 (Stil MamaScreen) */}
+        <View style={styles.sliderWithButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+            onPress={() => setAmount((prev) => Math.max(0, (typeof prev === 'number' ? prev : 0) - 5))}
+            disabled={isSubmitting}
+          >
+            <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>-</Text>
+          </TouchableOpacity>
+
+          <View style={styles.sliderWrapper}>
+            <Slider
+              value={typeof amount === 'number' ? amount : 0}
+              onValueChange={(val) => setAmount(Array.isArray(val) ? val[0] : val)}
+              minimumValue={10}
+              maximumValue={300}
+              step={5}
+              minimumTrackTintColor="#D35400"
+              thumbTintColor="#D35400"
+              maximumTrackTintColor={currentTheme.border}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+            onPress={() => setAmount((prev) => (typeof prev === 'number' ? prev : 0) + 5)}
+            disabled={isSubmitting}
+          >
+            <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>+</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Buton Confirmare pe toată lățimea ecranului */}
@@ -359,7 +377,31 @@ const styles = StyleSheet.create({
   quickBtnText: { fontSize: 12, fontWeight: 'bold' },
   quickBtnTextActive: { color: '#FFF' },
 
-  sliderContainer: { width: '100%', paddingHorizontal: 10, marginVertical: 6 },
+  // Stiluri pentru rândul slider-ului cu butoane laterale (-5 / +5)
+  sliderWithButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 4,
+    marginVertical: 8,
+  },
+  sliderStepBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 1,
+  },
+  sliderStepBtnText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  sliderWrapper: {
+    flex: 1,
+    marginHorizontal: 10,
+  },
 
   confirmBtnFullWidth: {
     backgroundColor: '#D35400',

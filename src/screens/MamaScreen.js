@@ -465,9 +465,20 @@ export default function MamaScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 20,
+  },
+  card: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+    elevation: 1,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   sectionHeader: { fontSize: 16, fontWeight: 'bold', color: '#D81B60', marginBottom: 10 },
   row: { flexDirection: 'row', alignItems: 'center' },
@@ -540,7 +551,15 @@ const styles = StyleSheet.create({
   optionTextActive: { color: '#FFF' },
   saveBtn: { flexDirection: 'row', backgroundColor: '#D81B60', paddingVertical: 10, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1 },
+
+  historyItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+  },
   historyType: { fontWeight: 'bold', fontSize: 14 },
   historyDateTime: { fontSize: 12, marginTop: 2, fontWeight: '500' },
   historyValue: { fontSize: 14, fontWeight: 'bold', color: '#D81B60' },

@@ -4,15 +4,16 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Alert,
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   getLocalEntries,
   saveLocalEntries,
@@ -28,10 +29,15 @@ import { translations } from '../services/translations';
 
 export default function SleepTrackerScreen() {
   const navigation = useNavigation();
-  const [startTime, setStartTime] = useState(
-    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  );
-  const [endTime, setEndTime] = useState('');
+
+  // Stări pentru date/ore
+  const [startDate, setStartDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+
+  const [hasNextMorning, setHasNextMorning] = useState(false);
+  const [endDate, setEndDate] = useState(new Date());
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
   const [currentLang, setCurrentLang] = useState('ro');
@@ -58,6 +64,24 @@ export default function SleepTrackerScreen() {
     };
   }, []);
 
+  const onChangeStartTime = (event, selectedDate) => {
+    if (Platform.OS === 'android') {
+      setShowStartPicker(false);
+    }
+    if (selectedDate) {
+      setStartDate(selectedDate);
+    }
+  };
+
+  const onChangeEndTime = (event, selectedDate) => {
+    if (Platform.OS === 'android') {
+      setShowEndPicker(false);
+    }
+    if (selectedDate) {
+      setEndDate(selectedDate);
+    }
+  };
+
   const handleBack = () => {
     if (navigation && navigation.canGoBack && navigation.canGoBack()) {
       navigation.goBack();
@@ -67,21 +91,22 @@ export default function SleepTrackerScreen() {
   };
 
   const handleSave = async () => {
-    if (isSubmitting) return; // Prevenim trimiterile multiple
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
       const now = new Date();
 
-      // Calcul dată locală curată YYYY-MM-DD
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
       const nowIsoString = now.toISOString().replace('T', ' ').substring(0, 19);
 
-      const cleanStart = startTime.trim() || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const cleanEnd = endTime.trim();
+      const cleanStart = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      const cleanEnd = hasNextMorning
+        ? endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        : '';
 
       const sleepLabel = t.sleepStartLabel || 'Adormit la';
       const wakeLabel = t.wakeEndLabel || 'Trezit la';
@@ -99,12 +124,10 @@ export default function SleepTrackerScreen() {
         fullDateTime: nowIsoString,
       };
 
-      // 1. Salvăm local
       const currentEntries = await getLocalEntries();
       const updatedEntries = [newEntry, ...(Array.isArray(currentEntries) ? currentEntries : [])];
       await saveLocalEntries(updatedEntries);
 
-      // 2. Trimitere în Google Sheet dacă nu e forțat offline
       const forcedOffline = await getForceOffline();
       if (!forcedOffline) {
         const sheetUrl = await getStoredSheetUrl();
@@ -116,12 +139,11 @@ export default function SleepTrackerScreen() {
         }
       }
 
-      // Navigăm automat înapoi către HomeScreen
       handleBack();
     } catch (e) {
       console.error('Eroare la salvarea somnului:', e);
       Alert.alert(t.error || 'Eroare', t.saveError || 'Nu s-a putut salva somnul.');
-      setIsSubmitting(false); // Reactivăm butonul doar dacă apare o eroare
+      setIsSubmitting(false);
     }
   };
 
@@ -129,52 +151,94 @@ export default function SleepTrackerScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      <TouchableOpacity style={styles.backBtn} onPress={handleBack} disabled={isSubmitting}>
-        <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
-      </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack} disabled={isSubmitting}>
+          <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
+        </TouchableOpacity>
 
-      <Text style={[styles.title, { color: currentTheme.textMain }]}>
-        {t.sleepTitle || 'Înregistrare Somn 🌙'}
-      </Text>
-
-      <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: currentTheme.textSub }]}>
-          {t.sleepStartTimeLabel || 'Ora adormirii:'}
+        <Text style={[styles.title, { color: currentTheme.textMain }]}>
+          {t.sleepTitle || 'Înregistrare Somn 🌙'}
         </Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-          value={startTime}
-          onChangeText={setStartTime}
-          placeholderTextColor={currentTheme.inputPlaceholder}
-          editable={!isSubmitting}
-        />
-      </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: currentTheme.textSub }]}>
-          {t.sleepEndTimeLabel || 'Ora trezirii (Opțional):'}
-        </Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-          placeholder={t.sleepEndTimePlaceholder || 'Lăsați gol dacă doarme acum'}
-          placeholderTextColor={currentTheme.inputPlaceholder}
-          value={endTime}
-          onChangeText={setEndTime}
-          editable={!isSubmitting}
-        />
-      </View>
+        {/* Ora Adormirii */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: currentTheme.textSub }]}>
+            {t.sleepStartTimeLabel || 'Ora adormirii:'}
+          </Text>
+          <TouchableOpacity
+            style={[styles.timePickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
+            onPress={() => setShowStartPicker(true)}
+            disabled={isSubmitting}
+          >
+            <Ionicons name="moon-outline" size={20} color="#2980B9" style={{ marginRight: 8 }} />
+            <Text style={[styles.timePickerText, { color: currentTheme.inputText }]}>
+              {startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      <TouchableOpacity
-        style={[styles.saveBtn, isSubmitting && styles.saveBtnDisabled]}
-        onPress={handleSave}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator size="small" color="#FFF" />
-        ) : (
-          <Text style={styles.saveBtnText}>{t.save || 'Creează Înregistrare'}</Text>
+        {showStartPicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onChangeStartTime}
+          />
         )}
-      </TouchableOpacity>
+
+        {/* Toggle / Opțiune pentru Ora Trezirii */}
+        <View style={styles.inputGroup}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.label, { color: currentTheme.textSub }]}>
+              {t.sleepEndTimeLabel || 'Ora trezirii:'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setHasNextMorning(!hasNextMorning)}
+              style={[styles.toggleBadge, { backgroundColor: hasNextMorning ? '#2980B9' : currentTheme.inputBackground, borderColor: currentTheme.border }]}
+            >
+              <Text style={[styles.toggleText, { color: hasNextMorning ? '#FFF' : currentTheme.textSub }]}>
+                {hasNextMorning ? 'Activă (Setează ora)' : 'Doarme încă (Fără oră)'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {hasNextMorning && (
+            <TouchableOpacity
+              style={[styles.timePickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border, marginTop: 8 }]}
+              onPress={() => setShowEndPicker(true)}
+              disabled={isSubmitting}
+            >
+              <Ionicons name="sunny-outline" size={20} color="#E67E22" style={{ marginRight: 8 }} />
+              <Text style={[styles.timePickerText, { color: currentTheme.inputText }]}>
+                {endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {showEndPicker && hasNextMorning && (
+          <DateTimePicker
+            value={endDate}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onChangeEndTime}
+          />
+        )}
+
+        <TouchableOpacity
+          style={[styles.saveBtn, isSubmitting && styles.saveBtnDisabled]}
+          onPress={handleSave}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <Text style={styles.saveBtnText}>{t.save || 'Creează Înregistrare'}</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -182,19 +246,41 @@ export default function SleepTrackerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 10,
   },
-  backBtn: { marginTop: 10, marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 30 },
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, marginBottom: 8, fontWeight: '600' },
-  input: {
+  scrollContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  backBtn: { marginTop: 10, marginBottom: 15 },
+  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
+  inputGroup: { marginBottom: 18 },
+  label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+
+  timePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 14,
     borderRadius: 12,
-    fontSize: 16,
     borderWidth: 1,
   },
+  timePickerText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+
+  toggleBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  toggleText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
   saveBtn: {
     backgroundColor: '#2980B9',
     padding: 16,
