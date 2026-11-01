@@ -32,6 +32,7 @@ import {
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
 import { translations } from '../services/translations';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen({ navigation }) {
   const [sheetUrl, setSheetUrl] = useState('');
@@ -81,7 +82,6 @@ export default function SettingsScreen({ navigation }) {
             setIsDarkMode(darkVal);
             setCurrentLang(langVal);
 
-            // Salvăm starea inițială pentru comparație
             setInitialState({
               sheetUrl: urlVal,
               babyName: nameVal,
@@ -104,7 +104,6 @@ export default function SettingsScreen({ navigation }) {
     }, [])
   );
 
-  // Verificăm dacă există modificări nesalvate
   const hasChanges =
     sheetUrl !== initialState.sheetUrl ||
     babyName !== initialState.babyName ||
@@ -113,7 +112,6 @@ export default function SettingsScreen({ navigation }) {
     isDarkMode !== initialState.isDarkMode ||
     currentLang !== initialState.currentLang;
 
-  // Interceptăm butonul de back / ieșire din ecran
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (!hasChanges) {
@@ -166,6 +164,9 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
+
+  const appVersion = Constants.expoConfig?.version;
+
   const currentTheme = isDarkMode ? darkTheme : lightTheme;
 
   return (
@@ -185,6 +186,18 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+
+        {/* Secțiune Versiune Aplicație */}
+        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.label, { color: currentTheme.textMain, marginBottom: 0 }]}>
+              {t.appVersion || 'Versiune Aplicație'}
+            </Text>
+            <Text style={[styles.versionText, { color: currentTheme.textSub }]}>
+              v{appVersion}
+            </Text>
+          </View>
+        </View>
 
         {/* Secțiune Limbă / Language Selector */}
         <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
@@ -288,7 +301,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 12,
     paddingBottom: 10,
-    // Corectare padding superior în funcție de sistemul de operare pentru a evita suprapunerea cu ceasul/bateria
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 10,
   },
   card: { padding: 12, borderRadius: 10, marginBottom: 8, elevation: 2, borderWidth: 1 },
@@ -296,6 +308,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
   label: { fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+  versionText: { fontSize: 13, fontWeight: 'bold' },
   input: { borderWidth: 1, borderRadius: 6, padding: 8, fontSize: 13 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingText: { fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },

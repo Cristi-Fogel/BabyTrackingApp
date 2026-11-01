@@ -15,7 +15,7 @@ export const translations = {
     sleep: 'Somn',
     growth: 'Creștere',
     mama: 'MAMA',
-    sleeping: (name) => `${name} doarme 🌙`,
+    sleeping: (name) => `${name} doarme`,
     wakeUp: 'S-a trezit!',
     noActivity: 'Nu există activități.',
     actionTitle: 'Acțiune Înregistrare',
@@ -27,6 +27,7 @@ export const translations = {
     editPlaceholder: 'Modifică valoarea...',
     settingsTitle: 'Setări',
     language: 'Limbă / Language / Nyelv',
+    appVersion: 'Versiune Aplicație',
 
     // SleepTracker specific
     sleepTitle: 'Înregistrare Somn 🌙',
@@ -72,7 +73,7 @@ export const translations = {
     sleep: 'Sleep',
     growth: 'Growth',
     mama: 'MOM',
-    sleeping: (name) => `${name} is sleeping 🌙`,
+    sleeping: (name) => `${name} is sleeping`,
     wakeUp: 'Woke up!',
     noActivity: 'No activities found.',
     actionTitle: 'Entry Action',
@@ -112,6 +113,7 @@ export const translations = {
     growthWarning: 'Please enter at least one value (weight or height).',
     error: 'Error',
     saveError: 'Could not save data.',
+    appVersion: 'App Version',
   },
   hu: {
     syncTitle: 'Google Sheet Szinkron',
@@ -129,7 +131,7 @@ export const translations = {
     sleep: 'Alvás',
     growth: 'Növekedés',
     mama: 'ANYA',
-    sleeping: (name) => `${name} alszik 🌙`,
+    sleeping: (name) => `${name} alszik`,
     wakeUp: 'Felébredt!',
     noActivity: 'Nincsenek tevékenységek.',
     actionTitle: 'Bejegyzés Művelet',
@@ -169,5 +171,6 @@ export const translations = {
     growthWarning: 'Add meg legalább az egyik értéket (súly vagy magasság).',
     error: 'Hiba',
     saveError: 'Az adatok mentése sikertelen.',
+    appVersion: 'Alkalmazás Verzió',
   },
 };

@@ -272,54 +272,6 @@ export default function MamaScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* 1. Header Google Sheet Sync */}
-      <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-        <View style={styles.rowBetween}>
-          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>{t.syncTitle || 'Google Sheet Sync'}</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Ionicons name="settings-outline" size={22} color={currentTheme.textSub} />
-          </TouchableOpacity>
-        </View>
-
-        {!isUrlSaved ? (
-          <View style={[styles.row, { marginTop: 8 }]}>
-            <TextInput
-              style={[styles.input, { flex: 1, backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-              placeholder={t.connectPlaceholder || 'Introdu URL WebApp...'}
-              placeholderTextColor={currentTheme.inputPlaceholder}
-              value={sheetUrl}
-              onChangeText={setSheetUrl}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity style={styles.button} onPress={handleSaveUrl}>
-              <Text style={styles.buttonText}>{t.save || 'Salvează'}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={[styles.rowBetween, { marginTop: 6 }]}>
-            <View style={{ flex: 1, marginRight: 8, flexDirection: 'row', alignItems: 'center' }}>
-              {loading && <ActivityIndicator size="small" color="#D81B60" style={{ marginRight: 6 }} />}
-              <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>
-                {t.connected || 'Conectat'}: {sheetUrl}
-              </Text>
-            </View>
-            <View style={[styles.row, { flexShrink: 0 }]}>
-              <TouchableOpacity
-                style={[styles.buttonSmall, { backgroundColor: '#27AE60' }]}
-                onPress={() => performSync(sheetUrl, entries)}>
-                <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 2 }} />
-                <Text style={styles.buttonText}>{t.sync || 'Sync'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.buttonSmall, { backgroundColor: '#E67E22', marginLeft: 6 }]}
-                onPress={handleSwapUrl}>
-                <Text style={styles.buttonText}>{t.swap || 'Swap'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </View>
-
       {/* 2. Buton de Înapoi la Bebe */}
       <TouchableOpacity
         style={[
@@ -517,8 +469,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 20,
   },
-  card: { padding: 14, borderRadius: 12, marginBottom: 10, elevation: 2, borderWidth: 1 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold' },
   sectionHeader: { fontSize: 16, fontWeight: 'bold', color: '#D81B60', marginBottom: 10 },
   row: { flexDirection: 'row', alignItems: 'center' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

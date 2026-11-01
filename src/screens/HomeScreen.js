@@ -11,6 +11,7 @@ import {
   StatusBar,
   Modal,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,12 +34,14 @@ import {
 import { lightTheme } from '../theme/lightTheme';
 import { darkTheme } from '../theme/darkTheme';
 import { translations } from '../services/translations';
+import ZZZAnimation from '../components/ZZZAnimation';
+
+const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwWQ7UAaX_5fi1GT9nyNmpM5xZbUvVeZ2AY_mISSk7ANXoFSC6Y3Jq37y_EB5Fs4Toa3Q/exec';
 
   const [sheetUrl, setSheetUrl] = useState(DEFAULT_SHEET_URL);
-  const [isUrlSaved, setIsUrlSaved] = useState(true);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [babyName, setBabyName] = useState('Bebelușul');
@@ -53,6 +56,12 @@ export default function HomeScreen({ navigation }) {
 
   // Stare pentru Filtru Istoric ('all', 'milk', 'sleep', 'growth', 'mama')
   const [filterType, setFilterType] = useState('all');
+
+  // Stare pentru pagina curentă din meniul de activități (Swipe left-right)
+  const [activeMenuPage, setActiveMenuPage] = useState(0);
+
+  // Stare pentru secțiunile collapse/expand pe zile
+  const [collapsedDays, setCollapsedDays] = useState({});
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentEditingItem, setCurrentEditingItem] = useState(null);
@@ -145,7 +154,6 @@ export default function HomeScreen({ navigation }) {
 
           if (isMounted) {
             setSheetUrl(activeUrl);
-            setIsUrlSaved(true);
           }
 
           await performSync(activeUrl, safeLocal, savedDropsEnabled);
@@ -320,20 +328,6 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleSaveUrl = async () => {
-    if (!sheetUrl.trim()) return;
-    await saveSheetUrl(sheetUrl.trim());
-    setIsUrlSaved(true);
-    await performSync(sheetUrl.trim(), entries, dropsEnabled);
-  };
-
-  const handleSwapUrl = () => {
-    Alert.alert('Schimbare Link', 'Dorești să schimbi link-ul către Google Sheet?', [
-      { text: 'Anulează', style: 'cancel' },
-      { text: 'Da, schimbă', onPress: () => setIsUrlSaved(false) },
-    ]);
-  };
-
   const safeEntries = Array.isArray(entries) ? entries : [];
 
   const sortedRawEntries = [...safeEntries].sort((a, b) => {
@@ -373,10 +367,59 @@ export default function HomeScreen({ navigation }) {
     }
     if (filterType === 'milk') return tItem === 'milk' || tItem === 'lapte';
     if (filterType === 'sleep') return tItem === 'sleep';
-    if (filterType === 'growth') return tItem === 'growth' || tItem === 'crestere';
+    if (filterType === 'growth' || filterType === 'crestere') return tItem === 'growth' || tItem === 'crestere';
     if (filterType === 'mama') return tItem === 'mama' || tItem === 'alaptare';
     return true;
   });
+
+  // --- CALCUL CREȘTERE ---
+  const growthEntriesList = allUniqueEntries.filter(
+    (item) => item && (item.type === 'growth' || item.type === 'crestere')
+  );
+
+  const getGrowthDifferenceText = (currentItem) => {
+    const currentIndex = growthEntriesList.findIndex((i) => i.id === currentItem.id);
+    if (currentIndex === -1 || currentIndex === growthEntriesList.length - 1) {
+      return 'Prima măsurătoare';
+    }
+    const previousItem = growthEntriesList[currentIndex + 1];
+
+    const currVal = String(currentItem.value || '');
+    const prevVal = String(previousItem.value || '');
+
+    const currKg = parseFloat(currVal.match(/([\d.]+)\s*(?:kg|g)/i)?.[1] || '0');
+    const prevKg = parseFloat(prevVal.match(/([\d.]+)\s*(?:kg|g)/i)?.[1] || '0');
+
+    const currCm = parseFloat(currVal.match(/([\d.]+)\s*cm/i)?.[1] || '0');
+    const prevCm = parseFloat(prevVal.match(/([\d.]+)\s*cm/i)?.[1] || '0');
+
+    let diffs = [];
+    if (currKg && prevKg) {
+      const diffKg = (currKg - prevKg).toFixed(2);
+      diffs.push(`${diffKg > 0 ? '+' : ''}${diffKg} kg`);
+    }
+    if (currCm && prevCm) {
+      const diffCm = (currCm - prevCm).toFixed(1);
+      diffs.push(`${diffCm > 0 ? '+' : ''}${diffCm} cm`);
+    }
+
+    if (diffs.length > 0) {
+      return `🗓️ Față de data trecută: ${diffs.join(', ')}`;
+    }
+    return 'Actualizat';
+  };
+
+  // --- GRUPARE PE ZILE PENTRU ISTORIC ---
+  const groupedEntries = filteredEntries.reduce((groups, item) => {
+    const dateKey = cleanDate(item.date) || 'Altele';
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(item);
+    return groups;
+  }, {});
+
+  const sortedDates = Object.keys(groupedEntries).sort((a, b) => new Date(b) - new Date(a));
 
   const todayStr = getTodayDateString();
 
@@ -465,7 +508,13 @@ export default function HomeScreen({ navigation }) {
     setCurrentEditingItem(null);
   };
 
-  // --- FUNCȚIE TRADUCERE TIPURI DE ACTIVITĂȚI ---
+  const toggleDayCollapse = (dateKey) => {
+    setCollapsedDays((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  };
+
   const translateType = (type) => {
     const tLower = String(type || '').toLowerCase();
     if (tLower === 'milk' || tLower === 'lapte') return t.milk;
@@ -475,34 +524,44 @@ export default function HomeScreen({ navigation }) {
     return tLower.toUpperCase();
   };
 
-  // --- AFISARE DETALIATĂ A SOMNULUI (STIVUIT VERTICAL) ---
   const renderSleepDetails = (value) => {
     if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>-</Text>;
+
+    const isSleepingNow = value.toLowerCase().includes('adormit la') && !value.toLowerCase().includes('trezit la');
+    if (isSleepingNow) {
+      return (
+        <View style={[styles.sleepDetailsContainer, { flexDirection: 'row', alignItems: 'center' }]}>
+          <ZZZAnimation style={{ marginRight: 4 }} textStyle={{ color: '#2980B9', fontSize: 11 }} />
+          <Text style={[styles.sleepDetailTextActive, { color: '#2980B9' }]}>Doarme încă...</Text>
+        </View>
+      );
+    }
 
     const sleepMatch = value.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
     const wakeMatch = value.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
 
-    const sleepTime = sleepMatch ? sleepMatch[1].trim() : '';
-    const wakeTime = wakeMatch ? wakeMatch[1].trim() : '';
+    const sleepTimeStr = sleepMatch ? sleepMatch[1].trim() : '';
+    const wakeTimeStr = wakeMatch ? wakeMatch[1].trim() : '';
 
-    if (sleepTime || wakeTime) {
+    if (sleepTimeStr || wakeTimeStr) {
       return (
         <View style={styles.sleepDetailsContainer}>
-          {sleepTime ? (
+          {sleepTimeStr ? (
             <View style={styles.sleepDetailRow}>
-              <Ionicons name="moon-outline" size={13} color="#2980B9" style={{ marginRight: 3 }} />
-              <Text style={[styles.sleepDetailText, { color: currentTheme.textMain }]}>{sleepTime}</Text>
+              <Ionicons name="moon" size={13} color="#2980B9" style={{ marginRight: 4 }} />
+              <Text style={[styles.sleepDetailTextSleep, { color: '#2980B9' }]}>{sleepTimeStr}</Text>
             </View>
           ) : null}
-          {wakeTime ? (
+          {wakeTimeStr ? (
             <View style={[styles.sleepDetailRow, { marginTop: 2 }]}>
-              <Ionicons name="sunny-outline" size={13} color="#E67E22" style={{ marginRight: 3 }} />
-              <Text style={[styles.sleepDetailText, { color: currentTheme.textMain }]}>{wakeTime}</Text>
+              <Ionicons name="sunny" size={13} color="#E67E22" style={{ marginRight: 4 }} />
+              <Text style={[styles.sleepDetailTextWake, { color: '#E67E22' }]}>{wakeTimeStr}</Text>
             </View>
           ) : null}
         </View>
       );
     }
+
     return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{value}</Text>;
   };
 
@@ -524,50 +583,15 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* Sync Header */}
-      <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-        <View style={styles.rowBetween}>
-          <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>{t.syncTitle}</Text>
-          <View style={styles.row}>
-            {loading && <ActivityIndicator size="small" color={currentTheme.tint} style={{ marginRight: 8 }} />}
-            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-              <Ionicons name="settings-outline" size={20} color={currentTheme.textSub} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {!isUrlSaved ? (
-          <View style={[styles.row, { marginTop: 4 }]}>
-            <TextInput
-              style={[styles.input, { flex: 1, backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-              placeholder={t.connectPlaceholder}
-              placeholderTextColor={currentTheme.inputPlaceholder}
-              value={sheetUrl}
-              onChangeText={setSheetUrl}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity style={[styles.button, { backgroundColor: currentTheme.tint }]} onPress={handleSaveUrl}>
-              <Text style={styles.buttonText}>{t.save}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={[styles.rowBetween, { marginTop: 4 }]}>
-            <Text style={[styles.statusText, { color: currentTheme.textSub }]} numberOfLines={1}>{t.connected}: {sheetUrl}</Text>
-            <View style={styles.row}>
-              <TouchableOpacity
-                style={[styles.buttonSmall, { backgroundColor: '#27AE60' }]}
-                onPress={() => performSync(sheetUrl, entries, dropsEnabled)}>
-                <Ionicons name="refresh" size={12} color="#FFF" style={{ marginRight: 2 }} />
-                <Text style={styles.buttonText}>{t.sync}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.buttonSmall, { backgroundColor: '#E67E22', marginLeft: 4 }]}
-                onPress={handleSwapUrl}>
-                <Text style={styles.buttonText}>{t.swap}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+      {/* ANTET SUPERIOR (Nume Bebeluș & Buton Setări) */}
+      <View style={styles.topHeaderBar}>
+        <Text style={[styles.appMainTitle, { color: currentTheme.textMain }]}>{babyName}</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Settings')}
+          style={[styles.settingsIconButton, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+        >
+          <Ionicons name="settings-outline" size={20} color={currentTheme.textMain} />
+        </TouchableOpacity>
       </View>
 
       {/* MESAJUL DE LIPSĂ INTERNET */}
@@ -580,7 +604,7 @@ export default function HomeScreen({ navigation }) {
       {/* Banner Picături */}
       {showDropsBanner && (
         <View style={styles.dropsCard}>
-          <View style={styles.row}>
+          <View style={styles.dropsContentRow}>
             <Ionicons name="medkit-outline" size={22} color="#FFF" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.dropsTitle}>{t.dropsTitle}</Text>
@@ -594,47 +618,105 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
 
-      {/* Meniu Activități */}
-      <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>{t.menuHeader}</Text>
-      <View style={styles.menuGridContainer}>
-        <View style={styles.menuRow}>
-          <TouchableOpacity
-            style={[styles.menuCard, { backgroundColor: '#E67E22' }]}
-            onPress={() => navigation.navigate('MilkTracker')}>
-            <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
-            <Text style={styles.menuText}>{t.milk}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.menuCard, { backgroundColor: '#2980B9' }]}
-            onPress={() => navigation.navigate('SleepTracker')}>
-            <Ionicons name="moon-outline" size={20} color="#FFF" />
-            <Text style={styles.menuText}>{t.sleep}</Text>
-          </TouchableOpacity>
+      {/* 2. MENIU ACTIVITĂȚI 4x TILES (CU ÎNĂLȚIME DE 62px) */}
+      <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>
+        {t.menuHeader || 'Meniu Activități'}
+      </Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          const offsetX = e.nativeEvent.contentOffset.x;
+          const page = Math.round(offsetX / (width - 20));
+          setActiveMenuPage(page);
+        }}
+        style={styles.menuSwipeContainer}
+        contentContainerStyle={styles.menuSwipeContentContainer}
+      >
+        {/* Pagina 1: 4 tile-uri principale */}
+        <View style={[styles.menuPageGrid, { width: width - 20 }]}>
+          <View style={styles.menuRow}>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#E67E22' }]}
+              onPress={() => navigation.navigate('MilkTracker')}>
+              <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
+              <Text style={styles.menuText}>{t.milk}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#2980B9' }]}
+              onPress={() => navigation.navigate('SleepTracker')}>
+              <Ionicons name="moon-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>{t.sleep}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.menuRow, { marginTop: 6 }]}>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#27AE60' }]}
+              onPress={() => navigation.navigate('GrowthTracker')}>
+              <MaterialCommunityIcons name="ruler" size={20} color="#FFF" />
+              <Text style={styles.menuText}>{t.growth}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#D81B60' }]}
+              onPress={() => navigation.navigate('Mama')}>
+              <Ionicons name="woman-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>{t.mama}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={[styles.menuRow, { marginTop: 8 }]}>
-          <TouchableOpacity
-            style={[styles.menuCard, { backgroundColor: '#27AE60' }]}
-            onPress={() => navigation.navigate('GrowthTracker')}>
-            <MaterialCommunityIcons name="ruler" size={20} color="#FFF" />
-            <Text style={styles.menuText}>{t.growth}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.menuCard, { backgroundColor: '#D81B60' }]}
-            onPress={() => navigation.navigate('Mama')}>
-            <Ionicons name="woman-outline" size={20} color="#FFF" />
-            <Text style={styles.menuText}>{t.mama}</Text>
-          </TouchableOpacity>
+        {/* Pagina 2: 4 tile-uri viitoare */}
+        <View style={[styles.menuPageGrid, { width: width - 20 }]}>
+          <View style={styles.menuRow}>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#8E44AD' }]}
+              onPress={() => Alert.alert('În curând', 'Modulul Scutec va fi disponibil în curând.')}>
+              <MaterialCommunityIcons name="baby-face-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Scutec</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#16A085' }]}
+              onPress={() => Alert.alert('În curând', 'Modulul Achiziții va fi disponibil în curând.')}>
+              <Ionicons name="cart-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Achiziții</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.menuRow, { marginTop: 6 }]}>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#D35400' }]}
+              onPress={() => Alert.alert('În curând', 'Modulul Note va fi disponibil în curând.')}>
+              <Ionicons name="book-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Note</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#7F8C8D' }]}
+              onPress={() => Alert.alert('În curând', 'Modulul Custom va fi disponibil în curând.')}>
+              <Ionicons name="add-circle-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Custom</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+      </ScrollView>
+
+      {/* Indicatori puncte compacti */}
+      <View style={styles.paginationDotsContainer}>
+        <View style={[styles.dot, activeMenuPage === 0 && styles.activeDot]} />
+        <View style={[styles.dot, activeMenuPage === 1 && styles.activeDot]} />
       </View>
 
-      {/* Banner Somn Dinamic */}
+      {/* Banner Somn Dinamic (cu lună în stânga și ZZZ lângă titlu) */}
       {activeSleepEntry && (
         <View style={styles.activeSleepCard}>
           <View style={styles.row}>
             <Ionicons name="moon" size={22} color="#FFF" style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.activeSleepTitle}>{t.sleeping(babyName)}</Text>
+              <View style={[styles.row, { alignItems: 'center' }]}>
+                <Text style={styles.activeSleepTitle}>{t.sleeping(babyName)}</Text>
+                <ZZZAnimation style={{ marginLeft: 6 }} textStyle={{ color: '#FFF', fontSize: 13 }} />
+              </View>
               <Text style={styles.activeSleepSub}>{activeSleepEntry.value}</Text>
             </View>
           </View>
@@ -645,8 +727,8 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
 
-      {/* Zona Istoric cu Filtre Bazate pe Iconițe */}
-      <View style={[styles.card, { flex: 1, marginTop: 4, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+      {/* 3. ZONA ISTORIC CU FILTRE ȘI SECȚIUNI COLLAPSE/EXPAND PE ZILE */}
+      <View style={[styles.card, { flex: 1, marginTop: 2, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
 
         {/* Rând Filtre cu Iconițe (Compact) */}
         <View style={styles.filterRowContainer}>
@@ -698,46 +780,77 @@ export default function HomeScreen({ navigation }) {
             />
           }
         >
-          {filteredEntries.length === 0 ? (
+          {sortedDates.length === 0 ? (
             <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>{t.noActivity}</Text>
           ) : (
-            filteredEntries.map((item, index) => {
-              const itemKey = `entry_${index}_${item.id || index}`;
-              const formattedDate = cleanDate(item.date);
-              const formattedTime = cleanTime(item.time);
-              const dateTimeCombined = `${formattedDate} ${formattedTime}`.trim();
-              const isSleep = String(item.type || '').toLowerCase() === 'sleep';
+            sortedDates.map((dateStr) => {
+              const dayEntries = groupedEntries[dateStr];
+              const isToday = dateStr === todayStr;
+              const displayDateLabel = isToday ? 'Astăzi' : dateStr;
+              const isCollapsed = !!collapsedDays[dateStr];
 
               return (
-                <TouchableOpacity
-                  key={itemKey}
-                  style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
-                  onLongPress={() => {
-                    Alert.alert(t.actionTitle, t.actionSub, [
-                      { text: t.cancel, style: 'cancel' },
-                      { text: t.edit, onPress: () => handleOpenEditModal(item) },
-                      { text: t.delete, style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
-                    ]);
-                  }}
-                >
-                  <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
-                    {renderIconForType(item.type)}
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
-                        {translateType(item.type)}
+                <View key={dateStr} style={styles.dayGroupContainer}>
+                  {/* Antet Zi Collapse / Expand */}
+                  <TouchableOpacity
+                    style={[styles.dayHeaderRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
+                    onPress={() => toggleDayCollapse(dateStr)}
+                  >
+                    <View style={styles.row}>
+                      <Ionicons
+                        name={isCollapsed ? 'chevron-forward' : 'chevron-down'}
+                        size={16}
+                        color={currentTheme.textMain}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain }]}>
+                        📅 {displayDateLabel} ({dayEntries.length})
                       </Text>
-                      <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>{dateTimeCombined}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
 
-                  <View style={styles.valueRightContainer}>
-                    {isSleep ? (
-                      renderSleepDetails(item.value)
-                    ) : (
-                      <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{item.value || '-'}</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                  {/* Conținutul zilei (afișat doar dacă NU este collapsed) */}
+                  {!isCollapsed && dayEntries.map((item, index) => {
+                    const itemKey = `entry_${dateStr}_${index}_${item.id || index}`;
+                    const formattedTime = cleanTime(item.time);
+                    const isSleep = String(item.type || '').toLowerCase() === 'sleep';
+                    const isGrowth = String(item.type || '').toLowerCase() === 'growth' || String(item.type || '').toLowerCase() === 'crestere';
+
+                    return (
+                      <TouchableOpacity
+                        key={itemKey}
+                        style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
+                        onLongPress={() => {
+                          Alert.alert(t.actionTitle, t.actionSub, [
+                            { text: t.cancel, style: 'cancel' },
+                            { text: t.edit, onPress: () => handleOpenEditModal(item) },
+                            { text: t.delete, style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
+                          ]);
+                        }}
+                      >
+                        <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
+                          {renderIconForType(item.type)}
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
+                              {translateType(item.type)}
+                            </Text>
+                            <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>
+                              {isGrowth ? getGrowthDifferenceText(item) : formattedTime}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.valueRightContainer}>
+                          {isSleep ? (
+                            renderSleepDetails(item.value)
+                          ) : (
+                            <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{item.value || '-'}</Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               );
             })
           )}
@@ -778,30 +891,42 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2 },
-  card: { padding: 10, borderRadius: 10, marginBottom: 6, elevation: 2, borderWidth: 1 },
-  cardTitle: { fontSize: 14, fontWeight: 'bold' },
-  sectionHeader: { fontSize: 14, fontWeight: 'bold', marginVertical: 4, marginLeft: 2 },
+  container: { flex: 1, paddingHorizontal: 10, paddingBottom: 6, paddingTop: 2 },
+  card: { padding: 8, borderRadius: 10, marginBottom: 4, elevation: 1, borderWidth: 1 },
+  sectionHeader: { fontSize: 12, fontWeight: 'bold', marginVertical: 2, marginLeft: 2 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  input: { borderWidth: 1, borderRadius: 6, padding: 6, marginRight: 6, fontSize: 12 },
-  button: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
-  buttonSmall: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },
-  statusText: { flex: 1, fontSize: 11, marginRight: 6 },
+
+  topHeaderBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+    paddingHorizontal: 2,
+  },
+  appMainTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  settingsIconButton: {
+    padding: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
 
   filterRowContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingBottom: 6,
-    marginBottom: 4,
+    paddingBottom: 4,
+    marginBottom: 2,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     alignItems: 'center',
   },
   filterIconChip: {
-    padding: 8,
-    borderRadius: 10,
+    padding: 6,
+    borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -814,34 +939,47 @@ const styles = StyleSheet.create({
     borderColor: '#D35400',
   },
 
-  dropsCard: { backgroundColor: '#27AE60', padding: 10, borderRadius: 10, marginBottom: 6, elevation: 2 },
-  dropsTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  dropsCard: { backgroundColor: '#27AE60', padding: 10, borderRadius: 10, marginBottom: 4, elevation: 1 },
+  dropsContentRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  dropsTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   dropsSub: { color: '#E8F8F5', fontSize: 11, marginTop: 1 },
-  dropsBtn: { backgroundColor: '#FFF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
-  dropsBtnText: { color: '#27AE60', fontWeight: 'bold', fontSize: 12 },
+  dropsBtn: { backgroundColor: '#FFF', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end' },
+  dropsBtnText: { color: '#27AE60', fontWeight: 'bold', fontSize: 11 },
 
-  menuGridContainer: { marginBottom: 4 },
+  menuSwipeContainer: { flexGrow: 0, marginBottom: 2 },
+  menuSwipeContentContainer: { alignItems: 'center' },
+  menuPageGrid: { marginHorizontal: 2 },
   menuRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  menuCard: { flex: 1, marginHorizontal: 3, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1 },
-  menuText: { color: '#FFF', fontWeight: 'bold', marginTop: 4, fontSize: 12 },
+  menuCard: { flex: 1, marginHorizontal: 3, height: 62, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1, flexDirection: 'row' },
+  menuText: { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 11 },
 
-  activeSleepCard: { backgroundColor: '#2980B9', padding: 10, borderRadius: 10, marginBottom: 6, elevation: 2 },
-  activeSleepTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-  activeSleepSub: { color: '#EBF5FB', fontSize: 12, marginTop: 1 },
-  wakeUpBtn: { backgroundColor: '#FFF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
-  wakeUpBtnText: { color: '#2980B9', fontWeight: 'bold', fontSize: 12 },
+  paginationDotsContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: 8, marginBottom: 2 },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#ccc', marginHorizontal: 2 },
+  activeDot: { backgroundColor: '#D35400', width: 10 },
+
+  activeSleepCard: { backgroundColor: '#2980B9', padding: 8, borderRadius: 10, marginBottom: 4, elevation: 1 },
+  activeSleepTitle: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  activeSleepSub: { color: '#EBF5FB', fontSize: 11, marginTop: 1 },
+  wakeUpBtn: { backgroundColor: '#FFF', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 14, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 2 },
+  wakeUpBtnText: { color: '#2980B9', fontWeight: 'bold', fontSize: 11 },
+
+  dayGroupContainer: { marginBottom: 6 },
+  dayHeaderRow: { padding: 6, borderRadius: 6, borderWidth: 1, marginBottom: 4 },
+  dayHeaderTitle: { fontSize: 12, fontWeight: 'bold' },
 
   historyList: { flex: 1, marginTop: 2 },
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1 },
-  historyType: { fontWeight: 'bold', fontSize: 12 },
+  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, paddingLeft: 10 },
+  historyType: { fontWeight: 'bold', fontSize: 11 },
   historyDateTime: { fontSize: 10, marginTop: 1, fontWeight: '500' },
   valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center' },
-  historyValue: { fontSize: 13, fontWeight: 'bold', textAlign: 'right' },
-  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 13 },
+  historyValue: { fontSize: 12, fontWeight: 'bold', textAlign: 'right' },
+  emptyText: { textAlign: 'center', marginTop: 10, fontSize: 12 },
 
   sleepDetailsContainer: { alignItems: 'flex-end' },
   sleepDetailRow: { flexDirection: 'row', alignItems: 'center' },
-  sleepDetailText: { fontSize: 12, fontWeight: 'bold' },
+  sleepDetailTextSleep: { fontSize: 11, fontWeight: 'bold' },
+  sleepDetailTextWake: { fontSize: 11, fontWeight: 'bold' },
+  sleepDetailTextActive: { fontSize: 11, fontWeight: 'bold' },
 
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 15 },
   modalContent: { width: '100%', padding: 15, borderRadius: 10, elevation: 4 },
