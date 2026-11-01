@@ -15,7 +15,6 @@ export default function HistorySection({
   collapsedDays,
   toggleDayCollapse,
   cleanTime,
-  getGrowthDifferenceText,
   handleOpenEditModal,
   handleDeleteEntry,
   translateType,
@@ -76,6 +75,144 @@ export default function HistorySection({
     return <Ionicons name="moon-outline" size={18} color="#2980B9" style={{ marginRight: 8 }} />;
   };
 
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : '';
+
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+
+    return hours * 60 + minutes;
+  };
+
+  const calculateDayStats = (entries) => {
+    let totalMilk = 0;
+    let totalSleepMinutes = 0;
+
+    if (!entries || !Array.isArray(entries)) {
+      return { totalMilk: 0, sleepHours: '0.0', awakeHours: '0.0' };
+    }
+
+    entries.forEach((item) => {
+      const type = String(item?.type || '').toLowerCase();
+      const val = String(item?.value || '');
+
+      if (type === 'milk' || type === 'lapte' || type === 'alaptare') {
+        const mlMatch = val.match(/(\d+)\s*ml/i);
+        if (mlMatch) {
+          totalMilk += parseInt(mlMatch[1], 10);
+        }
+      }
+
+      if (type === 'sleep') {
+        const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
+        const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
+
+        if (sleepMatch && wakeMatch) {
+          const startMin = parseTimeToMinutes(sleepMatch[1].trim());
+          const endMin = parseTimeToMinutes(wakeMatch[1].trim());
+          if (startMin !== null && endMin !== null) {
+            let diff = endMin - startMin;
+            if (diff < 0) diff += 24 * 60;
+            totalSleepMinutes += diff;
+          }
+        }
+      }
+    });
+
+    const sleepHours = (totalSleepMinutes / 60).toFixed(1);
+    const awakeMinutesTotal = Math.max(0, 24 * 60 - totalSleepMinutes);
+    const awakeHours = (awakeMinutesTotal / 60).toFixed(1);
+
+    return {
+      totalMilk,
+      sleepHours,
+      awakeHours,
+    };
+  };
+
+  const isOlderThan7Days = (dateStr) => {
+    if (!dateStr || dateStr === 'Astăzi') return false;
+    const entryDate = new Date(dateStr);
+    const today = new Date();
+    const diffTime = today - entryDate;
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    return diffDays > 7;
+  };
+
+  // 1. Colectăm toate înregistrările de creștere
+  const allGrowthEntries = [];
+  Object.keys(groupedEntries || {}).forEach((dateStr) => {
+    const dayEntries = groupedEntries[dateStr] || [];
+    dayEntries.forEach((item) => {
+      const type = String(item?.type || '').toLowerCase();
+      if (type === 'growth' || type === 'crestere') {
+        allGrowthEntries.push({ ...item, resolvedDate: dateStr });
+      }
+    });
+  });
+
+  // 2. Sortăm STRICT CRONOLOGIC (de la cea mai veche dată la cea mai nouă)
+  allGrowthEntries.sort((a, b) => {
+    const formatToISO = (dStr) => {
+      if (!dStr || dStr === 'Astăzi') return new Date().toISOString().split('T')[0];
+      return dStr;
+    };
+    const dA = formatToISO(a.date || a.resolvedDate);
+    const dB = formatToISO(b.date || b.resolvedDate);
+    const timeA = a.time || '00:00';
+    const timeB = b.time || '00:00';
+
+    return new Date(`${dA}T${timeA}`) - new Date(`${dB}T${timeB}`);
+  });
+
+  // 3. Calculăm diferențele raportate la înregistrarea calendaristică PRECEDENTĂ
+  const getCalculatedGrowthDiff = (currentItem) => {
+    const valStr = String(currentItem?.value || '');
+    const currentKgMatch = valStr.match(/(\d+[\.,]?\d*)\s*kg/i);
+    const currentCmMatch = valStr.match(/(\d+[\.,]?\d*)\s*cm/i);
+
+    const currentKg = currentKgMatch ? parseFloat(currentKgMatch[1].replace(',', '.')) : null;
+    const currentCm = currentCmMatch ? parseFloat(currentCmMatch[1].replace(',', '.')) : null;
+
+    const currentIndex = allGrowthEntries.findIndex(e => e.id === currentItem.id);
+    if (currentIndex <= 0 || currentIndex === -1) {
+      return { heightDiff: '', weightDiff: '' };
+    }
+
+    const prevItem = allGrowthEntries[currentIndex - 1];
+    const prevValStr = String(prevItem?.value || '');
+    const prevKgMatch = prevValStr.match(/(\d+[\.,]?\d*)\s*kg/i);
+    const prevCmMatch = prevValStr.match(/(\d+[\.,]?\d*)\s*cm/i);
+
+    const prevKg = prevKgMatch ? parseFloat(prevKgMatch[1].replace(',', '.')) : null;
+    const prevCm = prevCmMatch ? parseFloat(prevCmMatch[1].replace(',', '.')) : null;
+
+    let heightDiff = '';
+    let weightDiff = '';
+
+    if (currentCm !== null && prevCm !== null) {
+      const diffCm = (currentCm - prevCm).toFixed(1);
+      heightDiff = `${diffCm > 0 ? '+' : ''}${diffCm.replace('.', ',')} cm`;
+    }
+
+    if (currentKg !== null && prevKg !== null) {
+      const diffKg = (currentKg - prevKg).toFixed(2);
+      weightDiff = `${diffKg > 0 ? '+' : ''}${diffKg.replace('.', ',')} kg`;
+    }
+
+    return { heightDiff, weightDiff };
+  };
+
+  const isGrowthFilter = filterType === 'growth';
+  const isMilkFilter = filterType === 'milk';
+  // Ascundem soare/lună pe filtrele de Growth și Milk
+  const hideSunMoon = isGrowthFilter || isMilkFilter;
+
   return (
     <View style={[styles.card, { flex: 1, marginTop: 2, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
       {/* Rând Filtre cu Iconițe */}
@@ -127,10 +264,14 @@ export default function HistorySection({
           <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>{t.noActivity}</Text>
         ) : (
           sortedDates.map((dateStr) => {
-            const dayEntries = groupedEntries[dateStr];
+            const dayEntries = groupedEntries[dateStr] || [];
             const isToday = dateStr === todayStr;
             const displayDateLabel = isToday ? 'Astăzi' : dateStr;
-            const isCollapsed = !!collapsedDays[dateStr];
+
+            const autoCollapsed = isOlderThan7Days(dateStr);
+            const isCollapsed = isGrowthFilter ? false : (collapsedDays[dateStr] !== undefined ? collapsedDays[dateStr] : autoCollapsed);
+
+            const stats = calculateDayStats(dayEntries);
 
             return (
               <View key={dateStr} style={styles.dayGroupContainer}>
@@ -138,25 +279,47 @@ export default function HistorySection({
                   style={[styles.dayHeaderRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
                   onPress={() => toggleDayCollapse(dateStr)}
                 >
-                  <View style={styles.row}>
-                    <Ionicons
-                      name={isCollapsed ? 'chevron-forward' : 'chevron-down'}
-                      size={16}
-                      color={currentTheme.textMain}
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain }]}>
-                      📅 {displayDateLabel} ({dayEntries.length})
-                    </Text>
+                  <View style={styles.rowBetween}>
+                    <View style={styles.row}>
+                      <Ionicons
+                        name={isCollapsed ? 'chevron-forward' : 'chevron-down'}
+                        size={16}
+                        color={currentTheme.textMain}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain }]}>
+                        📅 {displayDateLabel}
+                      </Text>
+                    </View>
+
+                    <View style={styles.row}>
+                      {stats.totalMilk > 0 && (
+                        <Text style={[styles.dayStatText, { color: '#D35400', marginRight: 6 }]}>
+                          🍼 {stats.totalMilk}ml
+                        </Text>
+                      )}
+                      {!hideSunMoon && (
+                        <>
+                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 6 }]}>
+                            ☀️ {stats.awakeHours}h
+                          </Text>
+                          <Text style={[styles.dayStatText, { color: '#2980B9' }]}>
+                            🌙 {stats.sleepHours}h
+                          </Text>
+                        </>
+                      )}
+                    </View>
                   </View>
                 </TouchableOpacity>
 
                 {!isCollapsed &&
                   dayEntries.map((item, index) => {
-                    const itemKey = `entry_${dateStr}_${index}_${item.id || index}`;
-                    const formattedTime = cleanTime(item.time);
-                    const isSleep = String(item.type || '').toLowerCase() === 'sleep';
-                    const isGrowth = String(item.type || '').toLowerCase() === 'growth' || String(item.type || '').toLowerCase() === 'crestere';
+                    const itemKey = `entry_${dateStr}_${index}_${item?.id || index}`;
+                    const formattedTime = cleanTime(item?.time);
+                    const isSleep = String(item?.type || '').toLowerCase() === 'sleep';
+                    const isGrowth = String(item?.type || '').toLowerCase() === 'growth' || String(item?.type || '').toLowerCase() === 'crestere';
+
+                    const { heightDiff, weightDiff } = isGrowth ? getCalculatedGrowthDiff(item) : { heightDiff: '', weightDiff: '' };
 
                     return (
                       <TouchableOpacity
@@ -171,19 +334,32 @@ export default function HistorySection({
                         }}
                       >
                         <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
-                          {renderIconForType(item.type)}
+                          {renderIconForType(item?.type)}
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
-                              {translateType(item.type)}
+                              {translateType(item?.type)}
                             </Text>
-                            <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>
-                              {isGrowth ? getGrowthDifferenceText(item) : formattedTime}
-                            </Text>
+                            {isGrowth ? (
+                              <View style={{ marginTop: 2 }}>
+                                {heightDiff ? <Text style={styles.growthSubText}>📏 {heightDiff}</Text> : null}
+                                {weightDiff ? <Text style={styles.growthSubText}>⚖️ {weightDiff}</Text> : null}
+                              </View>
+                            ) : (
+                              <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>
+                                {formattedTime}
+                              </Text>
+                            )}
                           </View>
                         </View>
 
                         <View style={styles.valueRightContainer}>
-                          {isSleep ? renderSleepDetails(item.value) : <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{item.value || '-'}</Text>}
+                          {isSleep ? (
+                            renderSleepDetails(item?.value)
+                          ) : (
+                            <Text style={[styles.historyValue, { color: isGrowth ? '#27AE60' : currentTheme.tint }]}>
+                              {item?.value || '-'}
+                            </Text>
+                          )}
                         </View>
                       </TouchableOpacity>
                     );
@@ -200,6 +376,7 @@ export default function HistorySection({
 const styles = StyleSheet.create({
   card: { padding: 8, borderRadius: 10, marginBottom: 4, elevation: 1, borderWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
   filterRowContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -223,11 +400,13 @@ const styles = StyleSheet.create({
   dayGroupContainer: { marginBottom: 6 },
   dayHeaderRow: { padding: 6, borderRadius: 6, borderWidth: 1, marginBottom: 4 },
   dayHeaderTitle: { fontSize: 12, fontWeight: 'bold' },
+  dayStatText: { fontSize: 10, fontWeight: 'bold' },
   historyList: { flex: 1, marginTop: 2 },
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, paddingLeft: 10 },
+  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, paddingLeft: 10 },
   historyType: { fontWeight: 'bold', fontSize: 11 },
   historyDateTime: { fontSize: 10, marginTop: 1, fontWeight: '500' },
-  valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center' },
+  growthSubText: { fontSize: 10, fontWeight: '600', color: '#27AE60', marginTop: 1 },
+  valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center', paddingTop: 2 },
   historyValue: { fontSize: 12, fontWeight: 'bold', textAlign: 'right' },
   emptyText: { textAlign: 'center', marginTop: 10, fontSize: 12 },
   sleepDetailsContainer: { alignItems: 'flex-end' },
