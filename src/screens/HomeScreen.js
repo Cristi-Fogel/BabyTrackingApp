@@ -529,47 +529,52 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
 
-      {/* 2. Banner Picături */}
-      {showDropsBanner && (
-        <DropsBanner babyName={babyName} t={t} onAdminister={handleAdministerDrops} />
-      )}
+      {/* 2. Zona Istoric mutat sus (cu flex: 1 ca să ocupe spațiul principal) */}
+      <View style={{ flex: 1 }}>
+        <HistorySection
+          currentTheme={currentTheme}
+          filterType={filterType}
+          setFilterType={setFilterType}
+          loading={loading}
+          onRefresh={() => performSync(sheetUrl, entries, dropsEnabled)}
+          sortedDates={sortedDates}
+          groupedEntries={groupedEntries}
+          todayStr={todayStr}
+          collapsedDays={collapsedDays}
+          toggleDayCollapse={toggleDayCollapse}
+          cleanTime={cleanTime}
+          getGrowthDifferenceText={getGrowthDifferenceText}
+          handleOpenEditModal={handleOpenEditModal}
+          handleDeleteEntry={handleDeleteEntry}
+          translateType={translateType}
+          t={t}
+        />
+      </View>
 
-      {/* 3. Meniu Activități (Swipe) */}
-      <ActivityMenuGrid
-        navigation={navigation}
-        t={t}
-        activeMenuPage={activeMenuPage}
-        setActiveMenuPage={setActiveMenuPage}
-        currentTheme={currentTheme}
-      />
+      {/* Zona de jos (Bannere active + Meniu acțiuni) */}
+      <View style={{ marginTop: 4 }}>
+        {/* 3. Banner Picături (deasupra butoanelor) */}
+        {showDropsBanner && (
+          <DropsBanner babyName={babyName} t={t} onAdminister={handleAdministerDrops} />
+        )}
 
-      {/* 4. Banner Somn Dinamic */}
-      <ActiveSleepBanner
-        activeSleepEntry={activeSleepEntry}
-        babyName={babyName}
-        t={t}
-        onWakeUp={handleWakeUp}
-      />
+        {/* 4. Banner Somn Dinamic (deasupra butoanelor) */}
+        <ActiveSleepBanner
+          activeSleepEntry={activeSleepEntry}
+          babyName={babyName}
+          t={t}
+          onWakeUp={handleWakeUp}
+        />
 
-      {/* 5. Zona Istoric cu Filtre & Collapse */}
-      <HistorySection
-        currentTheme={currentTheme}
-        filterType={filterType}
-        setFilterType={setFilterType}
-        loading={loading}
-        onRefresh={() => performSync(sheetUrl, entries, dropsEnabled)}
-        sortedDates={sortedDates}
-        groupedEntries={groupedEntries}
-        todayStr={todayStr}
-        collapsedDays={collapsedDays}
-        toggleDayCollapse={toggleDayCollapse}
-        cleanTime={cleanTime}
-        getGrowthDifferenceText={getGrowthDifferenceText}
-        handleOpenEditModal={handleOpenEditModal}
-        handleDeleteEntry={handleDeleteEntry}
-        translateType={translateType}
-        t={t}
-      />
+        {/* 5. Meniu Activități (jos de tot) */}
+        <ActivityMenuGrid
+          navigation={navigation}
+          t={t}
+          activeMenuPage={activeMenuPage}
+          setActiveMenuPage={setActiveMenuPage}
+          currentTheme={currentTheme}
+        />
+      </View>
 
       {/* 6. Modal Editare */}
       <EditEntryModal

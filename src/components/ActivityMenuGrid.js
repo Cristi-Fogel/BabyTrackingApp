@@ -13,6 +13,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
 
       <ScrollView
         horizontal
+        pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(e) => {
           const offsetX = e.nativeEvent.contentOffset.x;
@@ -71,12 +72,40 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Pagina 3: Remindere & Alarme */}
+        <View style={[styles.menuPageGrid, { width: width - 20 }]}>
+          <View style={styles.menuRow}>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#2980B9' }]}
+              onPress={() => navigation.navigate ? navigation.navigate('Reminders') : Alert.alert('Remindere', 'Ecranul de remindere se va deschide aici.')}
+            >
+              <Ionicons name="notifications-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Remindere</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#C0392B' }]}
+              onPress={() => navigation.navigate ? navigation.navigate('Alarms') : Alert.alert('Alarme', 'Ecranul de alarme se va deschide aici.')}
+            >
+              <Ionicons name="alarm-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Alarme</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Lăsăm rândul al doilea liber sau pregătit pentru alte opțiuni viitoare pe pagina 3 */}
+          <View style={[styles.menuRow, { marginTop: 6 }]}>
+            <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0 }]} />
+            <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0 }]} />
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Indicatori Puncte */}
+      {/* Indicatori Puncte (actualizați pentru 3 pagini) */}
       <View style={styles.paginationDotsContainer}>
         <View style={[styles.dot, activeMenuPage === 0 && styles.activeDot]} />
         <View style={[styles.dot, activeMenuPage === 1 && styles.activeDot]} />
+        <View style={[styles.dot, activeMenuPage === 2 && styles.activeDot]} />
       </View>
     </View>
   );
