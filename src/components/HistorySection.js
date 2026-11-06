@@ -20,6 +20,101 @@ export default function HistorySection({
   translateType,
   t,
 }) {
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : '';
+
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+
+    return hours * 60 + minutes;
+  };
+
+  const formatDuration = (totalMins) => {
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  };
+
+  const getSleepDurationText = (value) => {
+    if (!value) return '';
+    const sleepMatch = value.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
+    const wakeMatch = value.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
+
+    if (!sleepMatch || !wakeMatch) return '';
+
+    const startMin = parseTimeToMinutes(sleepMatch[1].trim());
+    const endMin = parseTimeToMinutes(wakeMatch[1].trim());
+
+    if (startMin === null || endMin === null) return '';
+
+    let diff = endMin - startMin;
+    if (diff < 0) diff += 24 * 60;
+
+    return formatDuration(diff);
+  };
+
+  const getSplitSleepParts = (item, dateStr) => {
+    const val = String(item?.value || '');
+    const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
+    const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
+
+    if (!sleepMatch || !wakeMatch) return [{ ...item, displayPart: 'full' }];
+
+    const sleepStr = sleepMatch[1].trim();
+    const wakeStr = wakeMatch[1].trim();
+    const startMin = parseTimeToMinutes(sleepStr);
+    const endMin = parseTimeToMinutes(wakeStr);
+
+    if (startMin === null || endMin === null) return [{ ...item, displayPart: 'full' }];
+
+    const crossesMidnight = endMin < startMin;
+    if (!crossesMidnight) return [{ ...item, displayPart: 'full' }];
+
+    const getNextDateStr = (dStr) => {
+      if (dStr === 'Astăzi') {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+      }
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return null;
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0];
+    };
+
+    const nextDateStr = getNextDateStr(dateStr);
+    const totalSleepMinutes = ((24 * 60) - startMin) + endMin;
+    const totalDurationText = formatDuration(totalSleepMinutes);
+
+    const part1 = {
+      ...item,
+      id: `${item.id}_part1`,
+      originalId: item.id,
+      displayPart: 'first',
+      value: `Adormit la ${sleepStr} - Trezit la 12:00 AM (A doua zi)`,
+      customDurationLabel: totalDurationText,
+    };
+
+    const part2 = {
+      ...item,
+      id: `${item.id}_part2`,
+      originalId: item.id,
+      displayPart: 'second',
+      value: `Adormit la 12:00 AM - Trezit la ${wakeStr}`,
+      targetDate: nextDateStr,
+      customDurationLabel: totalDurationText,
+    };
+
+    return [part1, part2];
+  };
+
   const renderSleepDetails = (value) => {
     if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>-</Text>;
 
@@ -61,8 +156,13 @@ export default function HistorySection({
     return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{value}</Text>;
   };
 
-  const renderIconForType = (type) => {
+  const renderIconForType = (type, value) => {
     const cleanType = String(type || '').toLowerCase();
+    const cleanValue = String(value || '').toLowerCase();
+
+    if (cleanValue.includes('sân') || cleanValue.includes('sâni') || cleanValue.includes('alăptare')) {
+      return <Ionicons name="heart" size={16} color="#D81B60" style={{ marginRight: 8 }} />;
+    }
     if (cleanType === 'milk' || cleanType === 'lapte') {
       return <FontAwesome5 name="wine-bottle" size={16} color="#D35400" style={{ marginRight: 8 }} />;
     }
@@ -73,20 +173,6 @@ export default function HistorySection({
       return <Ionicons name="woman-outline" size={18} color="#D81B60" style={{ marginRight: 8 }} />;
     }
     return <Ionicons name="moon-outline" size={18} color="#2980B9" style={{ marginRight: 8 }} />;
-  };
-
-  const parseTimeToMinutes = (timeStr) => {
-    if (!timeStr) return null;
-    const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-    if (!match) return null;
-    let hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    const ampm = match[3] ? match[3].toUpperCase() : '';
-
-    if (ampm === 'PM' && hours < 12) hours += 12;
-    if (ampm === 'AM' && hours === 12) hours = 0;
-
-    return hours * 60 + minutes;
   };
 
   const calculateDayStats = (entries) => {
@@ -101,7 +187,7 @@ export default function HistorySection({
       const type = String(item?.type || '').toLowerCase();
       const val = String(item?.value || '');
 
-      if (type === 'milk' || type === 'lapte' || type === 'alaptare') {
+      if (type === 'milk' || type === 'lapte' || type === 'alaptare' || val.toLowerCase().includes('sân')) {
         const mlMatch = val.match(/(\d+)\s*ml/i);
         if (mlMatch) {
           totalMilk += parseInt(mlMatch[1], 10);
@@ -117,7 +203,15 @@ export default function HistorySection({
           const endMin = parseTimeToMinutes(wakeMatch[1].trim());
           if (startMin !== null && endMin !== null) {
             let diff = endMin - startMin;
-            if (diff < 0) diff += 24 * 60;
+            if (diff < 0) {
+              if (item.displayPart === 'first') {
+                diff = (24 * 60) - startMin;
+              } else if (item.displayPart === 'second') {
+                diff = endMin;
+              } else {
+                diff += 24 * 60;
+              }
+            }
             totalSleepMinutes += diff;
           }
         }
@@ -128,11 +222,7 @@ export default function HistorySection({
     const awakeMinutesTotal = Math.max(0, 24 * 60 - totalSleepMinutes);
     const awakeHours = (awakeMinutesTotal / 60).toFixed(1);
 
-    return {
-      totalMilk,
-      sleepHours,
-      awakeHours,
-    };
+    return { totalMilk, sleepHours, awakeHours };
   };
 
   const isOlderThan7Days = (dateStr) => {
@@ -144,10 +234,56 @@ export default function HistorySection({
     return diffDays > 7;
   };
 
-  // 1. Colectăm toate înregistrările de creștere
+  const expandedGroupedEntries = {};
+  if (sortedDates && Array.isArray(sortedDates)) {
+    sortedDates.forEach((dateStr) => {
+      if (!expandedGroupedEntries[dateStr]) expandedGroupedEntries[dateStr] = [];
+      const dayEntries = groupedEntries[dateStr] || [];
+
+          dayEntries.forEach((item) => {
+            const type = String(item?.type || '').toLowerCase();
+            const val = String(item?.value || '').toLowerCase();
+
+            // Detectăm orice intrare de alăptare/sân sau lapte (chiar dacă are valoarea 0 sau fără ml)
+            const isBreastFeedingEntry = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
+            const isMilkFeeding = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeedingEntry;
+
+            if (type === 'sleep') {
+              const splitParts = getSplitSleepParts(item, dateStr);
+              if (splitParts.length > 1) {
+                expandedGroupedEntries[dateStr].push(splitParts[0]);
+                const nextDay = splitParts[1].targetDate;
+                if (nextDay) {
+                  if (!expandedGroupedEntries[nextDay]) expandedGroupedEntries[nextDay] = [];
+                  expandedGroupedEntries[nextDay].push(splitParts[1]);
+                }
+              } else {
+                expandedGroupedEntries[dateStr].push(item);
+              }
+            } else if (filterType === 'all') {
+              // 💡 Default: Afișăm absolut tot
+              expandedGroupedEntries[dateStr].push(item);
+            } else if (filterType === 'mama') {
+              if (type === 'mama' || type === 'alaptare' || isBreastFeedingEntry) {
+                expandedGroupedEntries[dateStr].push(item);
+              }
+            } else if (filterType === 'milk') {
+              // 💡 În filtrul de lapte, includem tot ce e legat de lapte / sân (inclusiv fără ml sau cu 0 ml)
+              if (isMilkFeeding) {
+                expandedGroupedEntries[dateStr].push(item);
+              }
+            } else if (type === filterType) {
+              expandedGroupedEntries[dateStr].push(item);
+            }
+          });
+    });
+  }
+
+  const allActiveDates = Array.from(new Set([...sortedDates, ...Object.keys(expandedGroupedEntries)])).sort().reverse();
+
   const allGrowthEntries = [];
-  Object.keys(groupedEntries || {}).forEach((dateStr) => {
-    const dayEntries = groupedEntries[dateStr] || [];
+  allActiveDates.forEach((dateStr) => {
+    const dayEntries = expandedGroupedEntries[dateStr] || [];
     dayEntries.forEach((item) => {
       const type = String(item?.type || '').toLowerCase();
       if (type === 'growth' || type === 'crestere') {
@@ -156,21 +292,12 @@ export default function HistorySection({
     });
   });
 
-  // 2. Sortăm STRICT CRONOLOGIC (de la cea mai veche dată la cea mai nouă)
   allGrowthEntries.sort((a, b) => {
-    const formatToISO = (dStr) => {
-      if (!dStr || dStr === 'Astăzi') return new Date().toISOString().split('T')[0];
-      return dStr;
-    };
-    const dA = formatToISO(a.date || a.resolvedDate);
-    const dB = formatToISO(b.date || b.resolvedDate);
-    const timeA = a.time || '00:00';
-    const timeB = b.time || '00:00';
-
-    return new Date(`${dA}T${timeA}`) - new Date(`${dB}T${timeB}`);
+    const formatToISO = (dStr) => (!dStr || dStr === 'Astăzi' ? new Date().toISOString().split('T')[0] : dStr);
+    return new Date(`${formatToISO(a.date || a.resolvedDate)}T${a.time || '00:00'}`) -
+           new Date(`${formatToISO(b.date || b.resolvedDate)}T${b.time || '00:00'}`);
   });
 
-  // 3. Calculăm diferențele raportate la înregistrarea calendaristică PRECEDENTĂ
   const getCalculatedGrowthDiff = (currentItem) => {
     const valStr = String(currentItem?.value || '');
     const currentKgMatch = valStr.match(/(\d+[\.,]?\d*)\s*kg/i);
@@ -180,9 +307,7 @@ export default function HistorySection({
     const currentCm = currentCmMatch ? parseFloat(currentCmMatch[1].replace(',', '.')) : null;
 
     const currentIndex = allGrowthEntries.findIndex(e => e.id === currentItem.id);
-    if (currentIndex <= 0 || currentIndex === -1) {
-      return { heightDiff: '', weightDiff: '' };
-    }
+    if (currentIndex <= 0 || currentIndex === -1) return { heightDiff: '', weightDiff: '' };
 
     const prevItem = allGrowthEntries[currentIndex - 1];
     const prevValStr = String(prevItem?.value || '');
@@ -199,7 +324,6 @@ export default function HistorySection({
       const diffCm = (currentCm - prevCm).toFixed(1);
       heightDiff = `${diffCm > 0 ? '+' : ''}${diffCm.replace('.', ',')} cm`;
     }
-
     if (currentKg !== null && prevKg !== null) {
       const diffKg = (currentKg - prevKg).toFixed(2);
       weightDiff = `${diffKg > 0 ? '+' : ''}${diffKg.replace('.', ',')} kg`;
@@ -210,45 +334,24 @@ export default function HistorySection({
 
   const isGrowthFilter = filterType === 'growth';
   const isMilkFilter = filterType === 'milk';
-  // Ascundem soare/lună pe filtrele de Growth și Milk
   const hideSunMoon = isGrowthFilter || isMilkFilter;
 
   return (
     <View style={[styles.card, { flex: 1, marginTop: 2, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-      {/* Rând Filtre cu Iconițe */}
       <View style={styles.filterRowContainer}>
-        <TouchableOpacity
-          style={[styles.filterIconChip, filterType === 'all' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
-          onPress={() => setFilterType('all')}
-        >
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'all' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('all')}>
           <Ionicons name="apps-outline" size={18} color={filterType === 'all' ? '#FFF' : currentTheme.textSub} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterIconChip, filterType === 'milk' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
-          onPress={() => setFilterType('milk')}
-        >
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'milk' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('milk')}>
           <FontAwesome5 name="wine-bottle" size={16} color={filterType === 'milk' ? '#FFF' : '#D35400'} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterIconChip, filterType === 'sleep' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
-          onPress={() => setFilterType('sleep')}
-        >
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'sleep' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('sleep')}>
           <Ionicons name="moon-outline" size={18} color={filterType === 'sleep' ? '#FFF' : '#2980B9'} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
-          onPress={() => setFilterType('growth')}
-        >
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('growth')}>
           <MaterialCommunityIcons name="ruler" size={18} color={filterType === 'growth' ? '#FFF' : '#27AE60'} />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.filterIconChip, filterType === 'mama' && styles.filterIconChipActive, { borderColor: currentTheme.border }]}
-          onPress={() => setFilterType('mama')}
-        >
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'mama' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('mama')}>
           <Ionicons name="woman-outline" size={18} color={filterType === 'mama' ? '#FFF' : '#D81B60'} />
         </TouchableOpacity>
       </View>
@@ -260,11 +363,13 @@ export default function HistorySection({
           <RefreshControl refreshing={loading} onRefresh={onRefresh} colors={[currentTheme.tint]} tintColor={currentTheme.tint} />
         }
       >
-        {sortedDates.length === 0 ? (
+        {allActiveDates.length === 0 ? (
           <Text style={[styles.emptyText, { color: currentTheme.textSub }]}>{t.noActivity}</Text>
         ) : (
-          sortedDates.map((dateStr) => {
-            const dayEntries = groupedEntries[dateStr] || [];
+          allActiveDates.map((dateStr) => {
+            const dayEntries = expandedGroupedEntries[dateStr] || [];
+            if (dayEntries.length === 0) return null;
+
             const isToday = dateStr === todayStr;
             const displayDateLabel = isToday ? 'Astăzi' : dateStr;
 
@@ -281,31 +386,15 @@ export default function HistorySection({
                 >
                   <View style={styles.rowBetween}>
                     <View style={styles.row}>
-                      <Ionicons
-                        name={isCollapsed ? 'chevron-forward' : 'chevron-down'}
-                        size={16}
-                        color={currentTheme.textMain}
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain }]}>
-                        📅 {displayDateLabel}
-                      </Text>
+                      <Ionicons name={isCollapsed ? 'chevron-forward' : 'chevron-down'} size={16} color={currentTheme.textMain} style={{ marginRight: 6 }} />
+                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain }]}>📅 {displayDateLabel}</Text>
                     </View>
-
                     <View style={styles.row}>
-                      {stats.totalMilk > 0 && (
-                        <Text style={[styles.dayStatText, { color: '#D35400', marginRight: 6 }]}>
-                          🍼 {stats.totalMilk}ml
-                        </Text>
-                      )}
+                      {stats.totalMilk > 0 && <Text style={[styles.dayStatText, { color: '#D35400', marginRight: 6 }]}>🍼 {stats.totalMilk}ml</Text>}
                       {!hideSunMoon && (
                         <>
-                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 6 }]}>
-                            ☀️ {stats.awakeHours}h
-                          </Text>
-                          <Text style={[styles.dayStatText, { color: '#2980B9' }]}>
-                            🌙 {stats.sleepHours}h
-                          </Text>
+                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 6 }]}>☀️ {stats.awakeHours}h</Text>
+                          <Text style={[styles.dayStatText, { color: '#2980B9' }]}>🌙 {stats.sleepHours}h</Text>
                         </>
                       )}
                     </View>
@@ -318,8 +407,12 @@ export default function HistorySection({
                     const formattedTime = cleanTime(item?.time);
                     const isSleep = String(item?.type || '').toLowerCase() === 'sleep';
                     const isGrowth = String(item?.type || '').toLowerCase() === 'growth' || String(item?.type || '').toLowerCase() === 'crestere';
-
                     const { heightDiff, weightDiff } = isGrowth ? getCalculatedGrowthDiff(item) : { heightDiff: '', weightDiff: '' };
+
+                    const realIdForAction = item.originalId || item.id;
+                    const sleepDurationLabel = isSleep
+                      ? (item.customDurationLabel || getSleepDurationText(item?.value))
+                      : '';
 
                     return (
                       <TouchableOpacity
@@ -328,13 +421,13 @@ export default function HistorySection({
                         onLongPress={() => {
                           Alert.alert(t.actionTitle, t.actionSub, [
                             { text: t.cancel, style: 'cancel' },
-                            { text: t.edit, onPress: () => handleOpenEditModal(item) },
-                            { text: t.delete, style: 'destructive', onPress: () => handleDeleteEntry(item.id) },
+                            { text: t.edit, onPress: () => handleOpenEditModal({ ...item, id: realIdForAction }) },
+                            { text: t.delete, style: 'destructive', onPress: () => handleDeleteEntry(realIdForAction) },
                           ]);
                         }}
                       >
                         <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
-                          {renderIconForType(item?.type)}
+                          {renderIconForType(item?.type, item?.value)}
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
                               {translateType(item?.type)}
@@ -346,18 +439,16 @@ export default function HistorySection({
                               </View>
                             ) : (
                               <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>
-                                {formattedTime}
+                                {isSleep && sleepDurationLabel ? sleepDurationLabel : formattedTime}
                               </Text>
                             )}
                           </View>
                         </View>
 
                         <View style={styles.valueRightContainer}>
-                          {isSleep ? (
-                            renderSleepDetails(item?.value)
-                          ) : (
+                          {isSleep ? renderSleepDetails(item?.value) : (
                             <Text style={[styles.historyValue, { color: isGrowth ? '#27AE60' : currentTheme.tint }]}>
-                              {item?.value || '-'}
+                              {item?.value ? item.value : '-'}
                             </Text>
                           )}
                         </View>
@@ -377,25 +468,8 @@ const styles = StyleSheet.create({
   card: { padding: 8, borderRadius: 10, marginBottom: 4, elevation: 1, borderWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
-  filterRowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingBottom: 4,
-    marginBottom: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    alignItems: 'center',
-  },
-  filterIconChip: {
-    padding: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    marginHorizontal: 3,
-    backgroundColor: 'transparent',
-  },
+  filterRowContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 4, marginBottom: 2, borderBottomWidth: 1, borderBottomColor: '#eee', alignItems: 'center' },
+  filterIconChip: { padding: 6, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flex: 1, marginHorizontal: 3, backgroundColor: 'transparent' },
   filterIconChipActive: { backgroundColor: '#D35400', borderColor: '#D35400' },
   dayGroupContainer: { marginBottom: 6 },
   dayHeaderRow: { padding: 6, borderRadius: 6, borderWidth: 1, marginBottom: 4 },

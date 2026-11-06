@@ -35,15 +35,15 @@ export default function MilkTrackerScreen() {
   const [milkSource, setMilkSource] = useState('Lapte praf');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Data și ora pornesc direct de la momentul curent (Acum)
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState('time');
 
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
   const [currentLang, setCurrentLang] = useState('ro');
 
   const t = translations[currentLang] || translations.ro;
-  const quickAmounts = [30, 60, 90, 120, 150, 180, 210];
+  const quickAmounts = [10, 30, 60, 90, 120, 150, 180, 210];
 
   useEffect(() => {
     let isMounted = true;
@@ -65,13 +65,18 @@ export default function MilkTrackerScreen() {
     };
   }, []);
 
-  const onChangeTime = (event, selectedDate) => {
+  const onChangePicker = (event, selectedDate) => {
     if (Platform.OS === 'android') {
       setShowPicker(false);
     }
     if (selectedDate) {
       setDate(selectedDate);
     }
+  };
+
+  const openPicker = (mode) => {
+    setPickerMode(mode);
+    setShowPicker(true);
   };
 
   const handleBack = () => {
@@ -89,15 +94,21 @@ export default function MilkTrackerScreen() {
     try {
       const now = new Date();
       const nowIsoString = now.toISOString().replace('T', ' ').substring(0, 19);
-
       const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-      const formattedValue = `${amount || 0} ml (${milkSource})`;
+
+      const isPureBreastFeeding = milkSource === 'Sân Stâng' || milkSource === 'Sân Drept' || milkSource === 'Ambii Sâni';
+      const formattedValue = isPureBreastFeeding
+        ? `${milkSource} (Alăptare directă)`
+        : `${amount || 0} ml (${milkSource})`;
+
+      // Salvăm totul cu type: 'milk' pentru procesare unitară
+      const entryType = 'milk';
 
       const newEntry = {
         id: now.getTime().toString(),
-        date: date.toISOString().split('T')[0], // YYYY-MM-DD
+        date: date.toISOString().split('T')[0],
         time: timeString,
-        type: 'milk',
+        type: entryType,
         value: formattedValue,
         fullDateTime: nowIsoString,
       };
@@ -126,52 +137,78 @@ export default function MilkTrackerScreen() {
     { label: t.milkFormula || 'Lapte praf', icon: 'baby-carriage' },
     { label: t.milkPumped || 'Lapte pompat', icon: 'wine-bottle' },
     { label: t.milkMix || 'Lapte Mix', icon: 'blender' },
-    { label: t.leftBreast || 'Sân Stâng', icon: 'female' },
-    { label: t.rightBreast || 'Sân Drept', icon: 'female' },
-    { label: t.bothBreasts || 'Ambii Sâni', icon: 'heart' },
+    { label: 'Sân Stâng', icon: 'female' },
+    { label: 'Sân Drept', icon: 'female' },
+    { label: 'Ambii Sâni', icon: 'heart' },
     { label: t.formulaLeft || 'Lapte praf + Sân Stâng', icon: 'female' },
     { label: t.formulaRight || 'Lapte praf + Sân Drept', icon: 'female' },
   ];
+
+  const isPureBreastFeeding = milkSource === 'Sân Stâng' || milkSource === 'Sân Drept' || milkSource === 'Ambii Sâni';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
       <ScrollView contentContainerStyle={styles.container}>
-        <TouchableOpacity style={styles.backBtn} onPress={handleBack} disabled={isSubmitting}>
-          <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
+
+        {/* Buton Înapoi la Bebe stilizat identic cu MamaScreen */}
+        <TouchableOpacity
+          style={[
+            styles.backButtonLarge,
+            {
+              backgroundColor: currentTheme.cardBackground,
+              borderColor: currentTheme.border,
+            },
+          ]}
+          onPress={handleBack}
+          disabled={isSubmitting}
+        >
+          <Ionicons name="arrow-back-outline" size={20} color={currentTheme.textMain} style={{ marginRight: 8 }} />
+          <Text style={[styles.backButtonLargeText, { color: currentTheme.textMain }]}>
+            Înapoi
+          </Text>
         </TouchableOpacity>
 
-        {/* 1. Rând Unic: Ora + Titlu Sursă / Tip Hrănire */}
+        {/* 1. Selector Dată & Oră + Titlu */}
         <View style={styles.topCompactRow}>
-          {/* Buton Oră */}
-          <TouchableOpacity
-            style={[styles.timeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-            onPress={() => setShowPicker(true)}
-          >
-            <Ionicons name="time-outline" size={18} color={currentTheme.textSub} style={{ marginRight: 6 }} />
-            <Text style={[styles.timeText, { color: currentTheme.inputText }]}>
-              {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.dateTimeBoxesContainer}>
+            <TouchableOpacity
+              style={[styles.dateTimeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+              onPress={() => openPicker('date')}
+            >
+              <Ionicons name="calendar-outline" size={16} color={currentTheme.textSub} style={{ marginRight: 4 }} />
+              <Text style={[styles.dateTimeText, { color: currentTheme.inputText }]}>
+                {date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
 
-          {/* Titlu Sursă / Tip Hrănire alăturat */}
+            <TouchableOpacity
+              style={[styles.dateTimeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+              onPress={() => openPicker('time')}
+            >
+              <Ionicons name="time-outline" size={16} color={currentTheme.textSub} style={{ marginRight: 4 }} />
+              <Text style={[styles.dateTimeText, { color: currentTheme.inputText }]}>
+                {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <Text style={[styles.sectionTitleInline, { color: currentTheme.textSub }]}>
             {t.milkSourceTitle || 'Sursă / Tip Hrănire'}
           </Text>
         </View>
 
-        {/* Picker-ul nativ */}
         {showPicker && (
           <DateTimePicker
             value={date}
-            mode="time"
+            mode={pickerMode}
             is24Hour={false}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onChangeTime}
+            onChange={onChangePicker}
           />
         )}
 
-        {/* 2. Selecție Tip Lapte / Sursă (Grid) */}
+        {/* 2. Selecție Tip Lapte */}
         <View style={styles.sourceGrid}>
           {sources.map((item) => {
             const isSelected = milkSource === item.label;
@@ -187,9 +224,9 @@ export default function MilkTrackerScreen() {
               >
                 <FontAwesome5
                   name={item.icon}
-                  size={13}
+                  size={14}
                   color={isSelected ? '#FFF' : currentTheme.textSub}
-                  style={{ marginRight: 5 }}
+                  style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.sourceText, { color: currentTheme.textSub }, isSelected && styles.sourceTextSelected]}>
                   {item.label}
@@ -199,79 +236,86 @@ export default function MilkTrackerScreen() {
           })}
         </View>
 
-        {/* 3. Input cantitate clasic (badge central) */}
-        <View style={styles.displayBadge}>
-          <TextInput
-            style={styles.amountInput}
-            keyboardType="numeric"
-            value={String(amount)}
-            onChangeText={(val) => {
-              const numericValue = val.replace(/[^0-9]/g, '');
-              setAmount(numericValue ? parseInt(numericValue, 10) : '');
-            }}
-            editable={!isSubmitting}
-          />
-          <Text style={styles.unitText}>ml</Text>
-        </View>
-
-        {/* 4. Quick amounts */}
-        <View style={styles.quickAmountContainer}>
-          {quickAmounts.map((qty) => (
-            <TouchableOpacity
-              key={qty}
-              style={[
-                styles.quickBtn,
-                { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-                amount === qty && styles.quickBtnActive,
-              ]}
-              onPress={() => setAmount(qty)}
-            >
-              <Text
-                style={[
-                  styles.quickBtnText,
-                  { color: currentTheme.textSub },
-                  amount === qty && styles.quickBtnTextActive,
-                ]}
-              >
-                {qty} ml
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* 5. Slider cantitate încadrat de butoanele -5 și +5 (Stil MamaScreen) */}
-        <View style={styles.sliderWithButtonsContainer}>
-          <TouchableOpacity
-            style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-            onPress={() => setAmount((prev) => Math.max(0, (typeof prev === 'number' ? prev : 0) - 5))}
-            disabled={isSubmitting}
-          >
-            <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>-</Text>
-          </TouchableOpacity>
-
-          <View style={styles.sliderWrapper}>
-            <Slider
-              value={typeof amount === 'number' ? amount : 0}
-              onValueChange={(val) => setAmount(Array.isArray(val) ? val[0] : val)}
-              minimumValue={10}
-              maximumValue={300}
-              step={5}
-              minimumTrackTintColor="#D35400"
-              thumbTintColor="#D35400"
-              maximumTrackTintColor={currentTheme.border}
-            />
+        {isPureBreastFeeding ? (
+          <View style={[styles.breastFeedingInfoBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <Ionicons name="heart" size={22} color={currentTheme.textMain} style={{ marginRight: 8 }} />
+            <Text style={[styles.breastFeedingInfoText, { color: currentTheme.textMain }]}>
+              Alăptare directă la sân ({milkSource}). Cantitatea în ml nu este necesară.
+            </Text>
           </View>
+        ) : (
+          <>
+            <View style={styles.displayBadge}>
+              <TextInput
+                style={styles.amountInput}
+                keyboardType="numeric"
+                value={String(amount)}
+                onChangeText={(val) => {
+                  const numericValue = val.replace(/[^0-9]/g, '');
+                  setAmount(numericValue ? parseInt(numericValue, 10) : '');
+                }}
+                editable={!isSubmitting}
+              />
+              <Text style={styles.unitText}>ml</Text>
+            </View>
 
-          <TouchableOpacity
-            style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-            onPress={() => setAmount((prev) => (typeof prev === 'number' ? prev : 0) + 5)}
-            disabled={isSubmitting}
-          >
-            <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>+</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.quickAmountContainer}>
+              {quickAmounts.map((qty) => (
+                <TouchableOpacity
+                  key={qty}
+                  style={[
+                    styles.quickBtn,
+                    { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                    amount === qty && styles.quickBtnActive,
+                  ]}
+                  onPress={() => setAmount(qty)}
+                >
+                  <Text
+                    style={[
+                      styles.quickBtnText,
+                      { color: currentTheme.textSub },
+                      amount === qty && styles.quickBtnTextActive,
+                    ]}
+                  >
+                    {qty} ml
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-        {/* Buton Confirmare pe toată lățimea ecranului */}
+            <View style={styles.sliderWithButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                onPress={() => setAmount((prev) => Math.max(0, (typeof prev === 'number' ? prev : 0) - 5))}
+                disabled={isSubmitting}
+              >
+                <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>-</Text>
+              </TouchableOpacity>
+
+              <View style={styles.sliderWrapper}>
+                <Slider
+                  value={typeof amount === 'number' ? amount : 0}
+                  onValueChange={(val) => setAmount(Array.isArray(val) ? val[0] : val)}
+                  minimumValue={10}
+                  maximumValue={300}
+                  step={5}
+                  minimumTrackTintColor="#D35400"
+                  thumbTintColor="#D35400"
+                  maximumTrackTintColor={currentTheme.border}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                onPress={() => setAmount((prev) => (typeof prev === 'number' ? prev : 0) + 5)}
+                disabled={isSubmitting}
+              >
+                <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         <TouchableOpacity
           style={[styles.confirmBtnFullWidth, isSubmitting && styles.confirmBtnDisabled]}
           onPress={handleSave}
@@ -301,24 +345,42 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'space-between',
   },
-  backBtn: { alignSelf: 'flex-start', marginBottom: 10, paddingVertical: 5 },
-
+  backButtonLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    elevation: 1,
+  },
+  backButtonLargeText: {
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
   topCompactRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  timeBox: {
+  dateTimeBoxesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
   },
-  timeText: { fontSize: 15, fontWeight: 'bold' },
-  sectionTitleInline: { fontSize: 14, fontWeight: 'bold' },
+  dateTimeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  dateTimeText: { fontSize: 13, fontWeight: 'bold' },
+  sectionTitleInline: { fontSize: 13, fontWeight: 'bold' },
 
   sourceGrid: {
     flexDirection: 'row',
@@ -329,17 +391,32 @@ const styles = StyleSheet.create({
   sourceOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     width: '48%',
-    marginBottom: 6,
+    marginBottom: 8,
     justifyContent: 'center',
   },
   sourceOptionSelected: { backgroundColor: '#D35400', borderColor: '#D35400' },
-  sourceText: { fontSize: 11, fontWeight: '600' },
+  sourceText: { fontSize: 12, fontWeight: '600' },
   sourceTextSelected: { color: '#FFF' },
+
+  breastFeedingInfoBox: {
+    borderWidth: 1,
+    padding: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+    elevation: 1,
+  },
+  breastFeedingInfoText: {
+    fontWeight: 'bold',
+    fontSize: 13,
+    flex: 1,
+  },
 
   displayBadge: {
     backgroundColor: '#D35400',
@@ -377,7 +454,6 @@ const styles = StyleSheet.create({
   quickBtnText: { fontSize: 12, fontWeight: 'bold' },
   quickBtnTextActive: { color: '#FFF' },
 
-  // Stiluri pentru rândul slider-ului cu butoane laterale (-5 / +5)
   sliderWithButtonsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
