@@ -2,7 +2,7 @@
   "expo": {
     "name": "BabyTrackApp",
     "slug": "BabyTrackApp",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,7 +10,11 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.anonymous.BabyTrackApp"
+      "package": "com.anonymous.BabyTrackApp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

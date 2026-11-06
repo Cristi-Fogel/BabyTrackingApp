@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
+// Calculăm lățimea exactă a unei pagini scăzând padding-ul total de pe ecran (de exemplu 24px)
+const pageWidth = width - 24;
 
 export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setActiveMenuPage, currentTheme }) {
   return (
@@ -17,14 +19,14 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(e) => {
           const offsetX = e.nativeEvent.contentOffset.x;
-          const page = Math.round(offsetX / (width - 20));
+          const page = Math.round(offsetX / pageWidth);
           setActiveMenuPage(page);
         }}
         style={styles.menuSwipeContainer}
         contentContainerStyle={styles.menuSwipeContentContainer}
       >
         {/* Pagina 1 */}
-        <View style={[styles.menuPageGrid, { width: width - 20 }]}>
+        <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
             <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#E67E22' }]} onPress={() => navigation.navigate('MilkTracker')}>
               <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
@@ -49,7 +51,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
         </View>
 
         {/* Pagina 2 */}
-        <View style={[styles.menuPageGrid, { width: width - 20 }]}>
+        <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
             <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#8E44AD' }]} onPress={() => Alert.alert('În curând', 'Modulul Scutec va fi disponibil în curând.')}>
               <MaterialCommunityIcons name="baby-face-outline" size={20} color="#FFF" />
@@ -74,7 +76,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
         </View>
 
         {/* Pagina 3: Remindere & Alarme */}
-        <View style={[styles.menuPageGrid, { width: width - 20 }]}>
+        <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
             <TouchableOpacity
               style={[styles.menuCard, { backgroundColor: '#2980B9' }]}
@@ -93,7 +95,6 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
             </TouchableOpacity>
           </View>
 
-          {/* Lăsăm rândul al doilea liber sau pregătit pentru alte opțiuni viitoare pe pagina 3 */}
           <View style={[styles.menuRow, { marginTop: 6 }]}>
             <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0 }]} />
             <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0 }]} />
@@ -101,7 +102,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
         </View>
       </ScrollView>
 
-      {/* Indicatori Puncte (actualizați pentru 3 pagini) */}
+      {/* Indicatori Puncte */}
       <View style={styles.paginationDotsContainer}>
         <View style={[styles.dot, activeMenuPage === 0 && styles.activeDot]} />
         <View style={[styles.dot, activeMenuPage === 1 && styles.activeDot]} />
@@ -115,7 +116,7 @@ const styles = StyleSheet.create({
   sectionHeader: { fontSize: 12, fontWeight: 'bold', marginVertical: 2, marginLeft: 2 },
   menuSwipeContainer: { flexGrow: 0, marginBottom: 2 },
   menuSwipeContentContainer: { alignItems: 'center' },
-  menuPageGrid: { marginHorizontal: 2 },
+  menuPageGrid: { marginHorizontal: 0 },
   menuRow: { flexDirection: 'row', justifyContent: 'space-between' },
   menuCard: { flex: 1, marginHorizontal: 3, height: 62, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1, flexDirection: 'row' },
   menuText: { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 11 },
