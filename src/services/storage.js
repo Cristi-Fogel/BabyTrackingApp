@@ -153,38 +153,44 @@ export const sendToSheet = async (url, data) => {
 // --- HELPERE GENERICE PENTRU EDITARE ȘI ȘTERGERE ---
 
 /**
- * Șterge o intrare (trimite o intrare goală cu același ID pe server și o elimină/marchează local)
+ * Șterge o înregistrare după ID atât local, cât și din Google Sheets.
  */
 export const deleteEntryById = async (itemId, currentEntries, sheetUrl) => {
-  const targetCleanId = String(itemId || '').replace(/^'/, '').trim();
-  if (!targetCleanId) return currentEntries;
+  try {
+    const cleanId = String(itemId).replace(/^'/, '').trim();
 
-  const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    // 1. Găsim elementul ca să-i luăm datele (tip, dată, etc.)
+    const targetItem = (currentEntries || []).find(
+      (item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId
+    );
 
-  const emptyEntry = {
-    id: targetCleanId,
-    date: '',
-    time: '',
-    type: '',
-    value: '',
-    fullDateTime: nowString,
-  };
+    // 2. Eliminăm elementul din lista locală
+    const updatedEntries = (currentEntries || []).filter(
+      (item) => String(item?.id || '').replace(/^'/, '').trim() !== cleanId
+    );
+    await saveLocalEntries(updatedEntries);
 
-  // Înlocuim intrarea existentă cu cea goală (pentru anulare)
-  const updatedEntries = currentEntries.map((item) => {
-    const cleanId = String(item.id || '').replace(/^'/, '').trim();
-    return cleanId === targetCleanId ? emptyEntry : item;
-  });
+    // 3. Trimitem în Google Sheets linia cu valoarea goală (value: '')
+    // exact cum funcționa înainte ca să fie ignorată de aplicație
+    const forcedOffline = await getForceOffline();
+    if (sheetUrl && !forcedOffline) {
+      const deletionPayload = {
+        id: cleanId,
+        date: targetItem?.date || '',
+        time: targetItem?.time || '',
+        type: targetItem?.type || '',
+        value: '', // <--- Aceasta este cheia pe care entriesMap o șterge automat din listă
+        fullDateTime: targetItem?.fullDateTime || '',
+      };
 
-  await saveLocalEntries(updatedEntries);
+      await sendToSheet(sheetUrl, deletionPayload);
+    }
 
-  if (sheetUrl) {
-    sendToSheet(sheetUrl, emptyEntry).catch((err) => {
-      console.log('Eroare la ștergere în fundal:', err);
-    });
+    return updatedEntries;
+  } catch (e) {
+    console.error('Eroare la ștergerea înregistrării:', e);
+    return currentEntries;
   }
-
-  return updatedEntries;
 };
 
 /**

@@ -137,9 +137,9 @@ export default function MilkTrackerScreen() {
     { label: t.milkFormula || 'Lapte praf', icon: 'baby-carriage' },
     { label: t.milkPumped || 'Lapte pompat', icon: 'wine-bottle' },
     { label: t.milkMix || 'Lapte Mix', icon: 'blender' },
+    { label: 'Ambii Sâni', icon: 'heart' },
     { label: 'Sân Stâng', icon: 'female' },
     { label: 'Sân Drept', icon: 'female' },
-    { label: 'Ambii Sâni', icon: 'heart' },
     { label: t.formulaLeft || 'Lapte praf + Sân Stâng', icon: 'female' },
     { label: t.formulaRight || 'Lapte praf + Sân Drept', icon: 'female' },
   ];

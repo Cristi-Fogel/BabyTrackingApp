@@ -38,20 +38,14 @@ export default function HomeScreen({ navigation }) {
   const [babyName, setBabyName] = useState('Bebelușul');
   const [dropsEnabled, setDropsEnabled] = useState(false);
 
-  // Stări pentru Offline, Temă și Limbă
   const [isOffline, setIsOffline] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
   const [currentLang, setCurrentLang] = useState('ro');
 
   const t = translations[currentLang] || translations.ro;
 
-  // Stare pentru Filtru Istoric ('all', 'milk', 'sleep', 'growth', 'mama')
   const [filterType, setFilterType] = useState('all');
-
-  // Stare pentru pagina curentă din meniul de activități (Swipe left-right)
   const [activeMenuPage, setActiveMenuPage] = useState(0);
-
-  // Stare pentru secțiunile collapse/expand pe zile
   const [collapsedDays, setCollapsedDays] = useState({});
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -60,7 +54,6 @@ export default function HomeScreen({ navigation }) {
 
   const isSyncingRef = useRef(false);
 
-  // --- FUNCȚII HELPER ---
   const cleanDate = (dateStr) => {
     if (!dateStr) return '';
     const str = String(dateStr);
@@ -170,6 +163,10 @@ export default function HomeScreen({ navigation }) {
     const forcedOffline = await getForceOffline();
     if (forcedOffline) {
       setIsOffline(true);
+      const localData = await getLocalEntries();
+      if (Array.isArray(localData)) {
+        setEntries([...localData]);
+      }
       return;
     }
 
@@ -177,6 +174,7 @@ export default function HomeScreen({ navigation }) {
     try {
       const remoteEntries = await fetchFromSheet(targetUrl);
       if (!Array.isArray(remoteEntries) || remoteEntries.length === 0) {
+        setLoading(false);
         return;
       }
 
@@ -197,17 +195,10 @@ export default function HomeScreen({ navigation }) {
       const todayStr = getTodayDateString();
 
       const localDropsAdministered = currentLocalEntries.some((item) => {
-        if (
-          !item ||
-          String(item.type || '').toLowerCase() !== 'drops' ||
-          cleanDate(item.date) !== todayStr
-        ) {
+        if (!item || String(item.type || '').toLowerCase() !== 'drops' || cleanDate(item.date) !== todayStr) {
           return false;
         }
-        return (
-          Number(item.drops) === 1 ||
-          String(item.value || '').trim().toLowerCase() === 'administrate'
-        );
+        return Number(item.drops) === 1 || String(item.value || '').trim().toLowerCase() === 'administrate';
       });
 
       if (localDropsAdministered) {
@@ -231,41 +222,38 @@ export default function HomeScreen({ navigation }) {
             drops: 1,
           });
         }
-
-        sendToSheet(targetUrl, {
-          id: `drops_${todayStr}`,
-          date: todayStr,
-          type: 'drops',
-          value: 'Administrate',
-          drops: 1,
-        }).catch(() => {});
-      } else if (isDropsOn) {
-        const hasRemoteToday = cleanRemote.some(
-          (e) => e.type === 'drops' && cleanDate(e.date) === todayStr
-        );
-
-        if (!hasRemoteToday) {
-          const newDropsEntry = {
-            id: `drops_${todayStr}`,
-            date: todayStr,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'drops',
-            value: 'Neadministrate',
-            fullDateTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            drops: 0,
-          };
-          cleanRemote.push(newDropsEntry);
-          await sendToSheet(targetUrl, newDropsEntry);
-        }
       }
 
-      setEntries(cleanRemote);
+      setEntries([...cleanRemote]);
       await saveLocalEntries(cleanRemote);
     } catch (e) {
       console.log('Sincronizare eșuată sau offline:', e);
       setIsOffline(true);
+      const localData = await getLocalEntries();
+      if (Array.isArray(localData)) {
+        setEntries([...localData]);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshEntries = async () => {
+    try {
+      const forcedOffline = await getForceOffline();
+      if (forcedOffline) {
+        const localData = await getLocalEntries();
+        if (Array.isArray(localData)) {
+          setEntries([...localData]);
+        }
+        return;
+      }
+
+      if (sheetUrl) {
+        await performSync(sheetUrl, entries, dropsEnabled);
+      }
+    } catch (e) {
+      console.error('Eroare la reîmprospătare:', e);
     }
   };
 
@@ -305,7 +293,7 @@ export default function HomeScreen({ navigation }) {
         updatedEntries.push(updatedDropsEntry);
       }
 
-      setEntries(updatedEntries);
+      setEntries([...updatedEntries]);
       await saveLocalEntries(updatedEntries);
 
       const forcedOffline = await getForceOffline();
@@ -321,6 +309,8 @@ export default function HomeScreen({ navigation }) {
 
   const safeEntries = Array.isArray(entries) ? entries : [];
 
+  // Sortăm crescător după fullDateTime, astfel încât modificările/intrările noi
+  // să fie procesate ultimele în Map și să suprascrie corect versiunile vechi.
   const sortedRawEntries = [...safeEntries].sort((a, b) => {
     const timeA = a.fullDateTime || a.id || '';
     const timeB = b.fullDateTime || b.id || '';
@@ -328,21 +318,38 @@ export default function HomeScreen({ navigation }) {
   });
 
   const entriesMap = new Map();
-  sortedRawEntries.forEach((item) => {
-    if (item && item.id) {
-      const cleanType = String(item.type || '').toLowerCase();
-      if (cleanType === 'drops') return;
+    sortedRawEntries.forEach((item) => {
+      if (item && item.id) {
+        const cleanType = String(item.type || '').toLowerCase();
+        if (cleanType === 'drops') return;
 
-      const cleanId = String(item.id).replace(/^'/, '').trim();
-      const val = String(item.value || '').trim();
+        const cleanId = String(item.id).replace(/^'/, '').trim();
+        const val = String(item.value || '').trim();
 
-      if (val === '') {
-        entriesMap.delete(cleanId);
-      } else {
-        entriesMap.set(cleanId, item);
+        if (val === '') {
+          entriesMap.delete(cleanId);
+        } else {
+          const existingItem = entriesMap.get(cleanId);
+
+          // Dacă deja există un item, verificăm: dacă cel nou conține "Trezit la"
+          // iar cel vechi nu, cel nou are prioritate absolută!
+          if (existingItem) {
+            const existingVal = String(existingItem.value || '').toLowerCase();
+            const newVal = val.toLowerCase();
+
+            if (newVal.includes('trezit la') && !existingVal.includes('trezit la')) {
+              entriesMap.set(cleanId, item); // Forțăm versiunea cu trezit la
+            } else if (!existingVal.includes('trezit la') && !newVal.includes('trezit la')) {
+              // Dacă ambele sunt simple, îl lăsăm pe cel mai nou cronologic
+              entriesMap.set(cleanId, item);
+            }
+            // Altfel, dacă cel existent are deja "trezit la", îl păstrăm pe acela și ignorăm versiunea veche "Adormit la"
+          } else {
+            entriesMap.set(cleanId, item);
+          }
+        }
       }
-    }
-  });
+    });
 
   const allUniqueEntries = Array.from(entriesMap.values()).sort((a, b) => {
     const timeA = a.fullDateTime || a.id || '';
@@ -350,7 +357,6 @@ export default function HomeScreen({ navigation }) {
     return timeB.localeCompare(timeA);
   });
 
-  // --- LOGICĂ FILTRARE ---
   const filteredEntries = allUniqueEntries.filter((item) => {
     const tItem = String(item.type || '').toLowerCase();
     if (filterType === 'all') {
@@ -363,7 +369,6 @@ export default function HomeScreen({ navigation }) {
     return true;
   });
 
-  // --- CALCUL CREȘTERE ---
   const growthEntriesList = allUniqueEntries.filter(
     (item) => item && (item.type === 'growth' || item.type === 'crestere')
   );
@@ -400,7 +405,6 @@ export default function HomeScreen({ navigation }) {
     return 'Actualizat';
   };
 
-  // --- GRUPARE PE ZILE PENTRU ISTORIC ---
   const groupedEntries = filteredEntries.reduce((groups, item) => {
     const dateKey = cleanDate(item.date) || 'Altele';
     if (!groups[dateKey]) {
@@ -463,14 +467,27 @@ export default function HomeScreen({ navigation }) {
         fullDateTime: nowString,
       };
 
-      const updatedEntries = [...safeEntries, updatedEntry];
-      setEntries(updatedEntries);
+      const currentEntries = await getLocalEntries();
+      const safeCurrent = Array.isArray(currentEntries) ? currentEntries : [];
+
+      const updatedEntries = safeCurrent.map((item) => {
+        const itemId = String(item?.id || '').replace(/^'/, '').trim();
+        return itemId === cleanId ? updatedEntry : item;
+      });
+
+      if (!updatedEntries.some((item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId)) {
+        updatedEntries.unshift(updatedEntry);
+      }
+
+      setEntries([...updatedEntries]);
       await saveLocalEntries(updatedEntries);
 
       const forcedOffline = await getForceOffline();
       if (sheetUrl && !forcedOffline) {
         await sendToSheet(sheetUrl, updatedEntry);
       }
+
+      await handleRefreshEntries();
     } catch (e) {
       console.error('Eroare la handleWakeUp:', e);
     } finally {
@@ -479,9 +496,8 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleDeleteEntry = async (itemId) => {
-    const forcedOffline = await getForceOffline();
-    const updated = await deleteEntryById(itemId, entries, forcedOffline ? null : sheetUrl);
-    setEntries(updated);
+    const updated = await deleteEntryById(itemId, entries, sheetUrl);
+    setEntries([...updated]);
   };
 
   const handleOpenEditModal = (item) => {
@@ -494,7 +510,7 @@ export default function HomeScreen({ navigation }) {
     if (!currentEditingItem) return;
     const forcedOffline = await getForceOffline();
     const updated = await updateEntryValue(currentEditingItem, editedValue, entries, forcedOffline ? null : sheetUrl);
-    setEntries(updated);
+    setEntries([...updated]);
     setEditModalVisible(false);
     setCurrentEditingItem(null);
   };
@@ -519,24 +535,21 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* 1. Header minimalist */}
       <HeaderBar babyName={babyName} navigation={navigation} currentTheme={currentTheme} />
 
-      {/* Mesaj Offline */}
       {isOffline && (
         <View style={{ backgroundColor: '#ffcccc', padding: 6, marginVertical: 2, borderRadius: 6 }}>
           <Text style={{ color: '#900', fontWeight: 'bold', fontSize: 11 }}>{t.offlineWarning}</Text>
         </View>
       )}
 
-      {/* 2. Zona Istoric mutat sus (cu flex: 1 ca să ocupe spațiul principal) */}
       <View style={{ flex: 1 }}>
         <HistorySection
           currentTheme={currentTheme}
           filterType={filterType}
           setFilterType={setFilterType}
           loading={loading}
-          onRefresh={() => performSync(sheetUrl, entries, dropsEnabled)}
+          onRefresh={handleRefreshEntries}
           sortedDates={sortedDates}
           groupedEntries={groupedEntries}
           todayStr={todayStr}
@@ -551,14 +564,11 @@ export default function HomeScreen({ navigation }) {
         />
       </View>
 
-      {/* Zona de jos (Bannere active + Meniu acțiuni) */}
       <View style={{ marginTop: 4 }}>
-        {/* 3. Banner Picături (deasupra butoanelor) */}
         {showDropsBanner && (
           <DropsBanner babyName={babyName} t={t} onAdminister={handleAdministerDrops} />
         )}
 
-        {/* 4. Banner Somn Dinamic (deasupra butoanelor) */}
         <ActiveSleepBanner
           activeSleepEntry={activeSleepEntry}
           babyName={babyName}
@@ -566,17 +576,16 @@ export default function HomeScreen({ navigation }) {
           onWakeUp={handleWakeUp}
         />
 
-        {/* 5. Meniu Activități (jos de tot) */}
         <ActivityMenuGrid
           navigation={navigation}
           t={t}
           activeMenuPage={activeMenuPage}
           setActiveMenuPage={setActiveMenuPage}
           currentTheme={currentTheme}
+          onEntryAdded={handleRefreshEntries}
         />
       </View>
 
-      {/* 6. Modal Editare */}
       <EditEntryModal
         visible={editModalVisible}
         currentTheme={currentTheme}

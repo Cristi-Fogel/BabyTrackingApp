@@ -1,12 +1,60 @@
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  getLocalEntries,
+  saveLocalEntries,
+  getStoredSheetUrl,
+  sendToSheet,
+  getForceOffline,
+} from '../services/storage';
 
 const { width } = Dimensions.get('window');
-// Calculăm lățimea exactă a unei pagini scăzând padding-ul total de pe ecran (de exemplu 24px)
 const pageWidth = width - 24;
 
-export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setActiveMenuPage, currentTheme }) {
+export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setActiveMenuPage, currentTheme, onEntryAdded }) {
+
+  const handleQuickSleepTap = async () => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      const cleanStart = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      const valueText = `Adormit la ${cleanStart}`;
+      const fullDateTimeStr = `${dateStr} ${now.toTimeString().split(' ')[0]}`;
+
+      const newEntry = {
+        id: now.getTime().toString(),
+        date: dateStr,
+        time: cleanStart,
+        type: 'sleep',
+        value: valueText,
+        fullDateTime: fullDateTimeStr,
+      };
+
+      const currentEntries = await getLocalEntries();
+      const updatedEntries = [newEntry, ...(Array.isArray(currentEntries) ? currentEntries : [])];
+      await saveLocalEntries(updatedEntries);
+
+      const forcedOffline = await getForceOffline();
+      if (!forcedOffline) {
+        const sheetUrl = await getStoredSheetUrl();
+        if (sheetUrl) {
+          await sendToSheet(sheetUrl, newEntry);
+        }
+      }
+
+      if (onEntryAdded) {
+        onEntryAdded();
+      }
+    } catch (e) {
+      console.error('Eroare la adăugarea rapidă a somnului:', e);
+    }
+  };
+
   return (
     <View style={{ marginBottom: 2 }}>
       <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>
@@ -32,9 +80,10 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
               <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
               <Text style={styles.menuText}>{t.milk}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#2980B9' }]} onPress={() => navigation.navigate('SleepTracker')}>
+
+            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#2980B9' }]} onPress={handleQuickSleepTap}>
               <Ionicons name="moon-outline" size={20} color="#FFF" />
-              <Text style={styles.menuText}>{t.sleep}</Text>
+              <Text style={styles.menuText}>{t.sleep || 'Somn'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -75,7 +124,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
           </View>
         </View>
 
-        {/* Pagina 3: Remindere & Alarme */}
+        {/* Pagina 3 */}
         <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
             <TouchableOpacity
@@ -96,13 +145,19 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
           </View>
 
           <View style={[styles.menuRow, { marginTop: 6 }]}>
-            <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0 }]} />
-            <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0 }]} />
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#1B4F72', flex: 1 }]}
+              onPress={() => navigation.navigate('SleepTracker')}
+            >
+              <Ionicons name="moon" size={18} color="#FFF" />
+              <Text style={styles.menuText}>Sleep Tracker Detaliat</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0, flex: 1, marginHorizontal: 3 }]} />
           </View>
         </View>
       </ScrollView>
 
-      {/* Indicatori Puncte */}
       <View style={styles.paginationDotsContainer}>
         <View style={[styles.dot, activeMenuPage === 0 && styles.activeDot]} />
         <View style={[styles.dot, activeMenuPage === 1 && styles.activeDot]} />
