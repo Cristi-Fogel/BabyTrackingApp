@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import ZZZAnimation from './ZZZAnimation'; // Asigură-te că calea este corectă în funcție de unde ai plasat fișierul
 import {
   getLocalEntries,
   saveLocalEntries,
@@ -12,9 +13,12 @@ import {
 const { width } = Dimensions.get('window');
 const pageWidth = width - 24;
 
-export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setActiveMenuPage, currentTheme, onEntryAdded }) {
+export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setActiveMenuPage, currentTheme, onEntryAdded, activeSleepEntry }) {
 
   const handleQuickSleepTap = async () => {
+    // Dacă există deja un somn activ, butonul este dezactivat și nu face nimic
+    if (activeSleepEntry) return;
+
     try {
       const now = new Date();
       const year = now.getFullYear();
@@ -81,9 +85,26 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
               <Text style={styles.menuText}>{t.milk}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#2980B9' }]} onPress={handleQuickSleepTap}>
-              <Ionicons name="moon-outline" size={20} color="#FFF" />
-              <Text style={styles.menuText}>{t.sleep || 'Somn'}</Text>
+            {/* Butonul de Somn cu ZZZAnimation integrat */}
+            <TouchableOpacity
+              style={[
+                styles.menuCard,
+                { backgroundColor: activeSleepEntry ? '#7F8C8D' : '#2980B9' }
+              ]}
+              onPress={handleQuickSleepTap}
+              activeOpacity={activeSleepEntry ? 1 : 0.7}
+            >
+              {activeSleepEntry ? (
+                <View style={styles.sleepActiveContainer}>
+                  <ZZZAnimation textStyle={{ color: '#FFF', fontSize: 13 }} />
+                  <Text style={[styles.menuText, { marginLeft: 4 }]}>Dormind</Text>
+                </View>
+              ) : (
+                <>
+                  <Ionicons name="moon-outline" size={20} color="#FFF" />
+                  <Text style={styles.menuText}>{t.sleep || 'Somn'}</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -175,6 +196,7 @@ const styles = StyleSheet.create({
   menuRow: { flexDirection: 'row', justifyContent: 'space-between' },
   menuCard: { flex: 1, marginHorizontal: 3, height: 62, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1, flexDirection: 'row' },
   menuText: { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 11 },
+  sleepActiveContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   paginationDotsContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: 8, marginBottom: 2 },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#ccc', marginHorizontal: 2 },
   activeDot: { backgroundColor: '#D35400', width: 10 },
