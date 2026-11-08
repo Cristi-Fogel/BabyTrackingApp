@@ -134,3 +134,4 @@ cd D:\BabyTrackApp\android
 .\gradlew assembleRelease
 .\gradlew installRelease
 
+[//]: # (D:\BabyTrackApp\android\app\build\outputs\apk\release)

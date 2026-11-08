@@ -9,6 +9,7 @@ import ActivityMenuGrid from '../components/ActivityMenuGrid';
 import ActiveSleepBanner from '../components/ActiveSleepBanner';
 import HistorySection from '../components/HistorySection';
 import EditEntryModal from '../components/EditEntryModal';
+import StatsDashboard from '../components/StatsDashboard'; // <-- Componenta nouă pentru grafice
 
 import {
   getLocalEntries,
@@ -41,6 +42,9 @@ export default function HomeScreen({ navigation }) {
   const [isOffline, setIsOffline] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
   const [currentLang, setCurrentLang] = useState('ro');
+
+  // Stare pentru toggle-ul graficelor din statistici
+  const [showStats, setShowStats] = useState(false);
 
   const t = translations[currentLang] || translations.ro;
 
@@ -309,8 +313,6 @@ export default function HomeScreen({ navigation }) {
 
   const safeEntries = Array.isArray(entries) ? entries : [];
 
-  // Sortăm crescător după fullDateTime, astfel încât modificările/intrările noi
-  // să fie procesate ultimele în Map și să suprascrie corect versiunile vechi.
   const sortedRawEntries = [...safeEntries].sort((a, b) => {
     const timeA = a.fullDateTime || a.id || '';
     const timeB = b.fullDateTime || b.id || '';
@@ -318,43 +320,59 @@ export default function HomeScreen({ navigation }) {
   });
 
   const entriesMap = new Map();
-    sortedRawEntries.forEach((item) => {
-      if (item && item.id) {
-        const cleanType = String(item.type || '').toLowerCase();
-        if (cleanType === 'drops') return;
+  sortedRawEntries.forEach((item) => {
+    if (item && item.id) {
+      const cleanType = String(item.type || '').toLowerCase();
+      if (cleanType === 'drops') return;
 
-        const cleanId = String(item.id).replace(/^'/, '').trim();
-        const val = String(item.value || '').trim();
+      const cleanId = String(item.id).replace(/^'/, '').trim();
+      const val = String(item.value || '').trim();
 
-        if (val === '') {
-          entriesMap.delete(cleanId);
-        } else {
-          const existingItem = entriesMap.get(cleanId);
+      if (val === '') {
+        entriesMap.delete(cleanId);
+      } else {
+        const existingItem = entriesMap.get(cleanId);
 
-          // Dacă deja există un item, verificăm: dacă cel nou conține "Trezit la"
-          // iar cel vechi nu, cel nou are prioritate absolută!
-          if (existingItem) {
-            const existingVal = String(existingItem.value || '').toLowerCase();
-            const newVal = val.toLowerCase();
+        if (existingItem) {
+          const existingVal = String(existingItem.value || '').toLowerCase();
+          const newVal = val.toLowerCase();
 
-            if (newVal.includes('trezit la') && !existingVal.includes('trezit la')) {
-              entriesMap.set(cleanId, item); // Forțăm versiunea cu trezit la
-            } else if (!existingVal.includes('trezit la') && !newVal.includes('trezit la')) {
-              // Dacă ambele sunt simple, îl lăsăm pe cel mai nou cronologic
-              entriesMap.set(cleanId, item);
-            }
-            // Altfel, dacă cel existent are deja "trezit la", îl păstrăm pe acela și ignorăm versiunea veche "Adormit la"
-          } else {
+          if (newVal.includes('trezit la') && !existingVal.includes('trezit la')) {
+            entriesMap.set(cleanId, item);
+          } else if (!existingVal.includes('trezit la') && !newVal.includes('trezit la')) {
             entriesMap.set(cleanId, item);
           }
+        } else {
+          entriesMap.set(cleanId, item);
         }
       }
-    });
+    }
+  });
 
+  // Sortare cronologică matematică în istoric pe baza orelor convertite în minute
   const allUniqueEntries = Array.from(entriesMap.values()).sort((a, b) => {
-    const timeA = a.fullDateTime || a.id || '';
-    const timeB = b.fullDateTime || b.id || '';
-    return timeB.localeCompare(timeA);
+    const timeToMinutes = (timeStr) => {
+      if (!timeStr) return 0;
+      const match = String(timeStr).match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+      if (!match) return 0;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const ampm = (match[3] || '').toUpperCase();
+
+      if (ampm === 'PM' && hours < 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+
+      return hours * 60 + minutes;
+    };
+
+    const dateA = cleanDate(a.date) || '0000-00-00';
+    const dateB = cleanDate(b.date) || '0000-00-00';
+
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+
+    return timeToMinutes(b.time) - timeToMinutes(a.time);
   });
 
   const filteredEntries = allUniqueEntries.filter((item) => {
@@ -535,7 +553,14 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      <HeaderBar babyName={babyName} navigation={navigation} currentTheme={currentTheme} />
+      {/* HeaderBar actualizat cu butonul de toggle pentru statistici */}
+      <HeaderBar
+        babyName={babyName}
+        navigation={navigation}
+        currentTheme={currentTheme}
+        showStats={showStats}
+        onToggleStats={() => setShowStats(!showStats)}
+      />
 
       {isOffline && (
         <View style={{ backgroundColor: '#ffcccc', padding: 6, marginVertical: 2, borderRadius: 6 }}>
@@ -544,6 +569,11 @@ export default function HomeScreen({ navigation }) {
       )}
 
       <View style={{ flex: 1 }}>
+        {/* Componenta de Grafice / Statistici plasată deasupra istoricului */}
+        {showStats && (
+          <StatsDashboard entries={allUniqueEntries} currentTheme={currentTheme} />
+        )}
+
         <HistorySection
           currentTheme={currentTheme}
           filterType={filterType}
@@ -583,6 +613,7 @@ export default function HomeScreen({ navigation }) {
           setActiveMenuPage={setActiveMenuPage}
           currentTheme={currentTheme}
           onEntryAdded={handleRefreshEntries}
+          activeSleepEntry={activeSleepEntry}
         />
       </View>
 
