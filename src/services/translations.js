@@ -18,7 +18,7 @@ export const translations = {
     sleeping: (name) => `${name} doarme`,
     wakeUp: 'S-a trezit!',
     noActivity: 'Nu există activități.',
-    actionTitle: 'Acțiune Înregistrare',
+    actionTitle: 'Ce dorești să faci?', // 💡 Actualizat direct cu întrebarea
     actionSub: 'Ce dorești să faci?',
     cancel: 'Anulează',
     edit: 'Editează',
@@ -76,7 +76,7 @@ export const translations = {
     sleeping: (name) => `${name} is sleeping`,
     wakeUp: 'Woke up!',
     noActivity: 'No activities found.',
-    actionTitle: 'Entry Action',
+    actionTitle: 'What do you want to do?', // 💡 Actualizat direct cu întrebarea
     actionSub: 'What do you want to do?',
     cancel: 'Cancel',
     edit: 'Edit',
@@ -134,7 +134,7 @@ export const translations = {
     sleeping: (name) => `${name} alszik`,
     wakeUp: 'Felébredt!',
     noActivity: 'Nincsenek tevékenységek.',
-    actionTitle: 'Bejegyzés Művelet',
+    actionTitle: 'Mit szeretnél tenni?', // 💡 Actualizat direct cu întrebarea
     actionSub: 'Mit szeretnél tenni?',
     cancel: 'Mégse',
     edit: 'Szerkesztés',

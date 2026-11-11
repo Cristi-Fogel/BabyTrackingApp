@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import ZZZAnimation from './ZZZAnimation';
 
@@ -15,8 +15,7 @@ export default function HistorySection({
   collapsedDays,
   toggleDayCollapse,
   cleanTime,
-  handleOpenEditModal,
-  handleDeleteEntry,
+  onOpenActionModal, // 💡 Înlocuit cu prop-ul pentru modalul personalizat de acțiuni
   translateType,
   t,
 }) {
@@ -240,42 +239,39 @@ export default function HistorySection({
       if (!expandedGroupedEntries[dateStr]) expandedGroupedEntries[dateStr] = [];
       const dayEntries = groupedEntries[dateStr] || [];
 
-          dayEntries.forEach((item) => {
-            const type = String(item?.type || '').toLowerCase();
-            const val = String(item?.value || '').toLowerCase();
+      dayEntries.forEach((item) => {
+        const type = String(item?.type || '').toLowerCase();
+        const val = String(item?.value || '').toLowerCase();
 
-            // Detectăm orice intrare de alăptare/sân sau lapte (chiar dacă are valoarea 0 sau fără ml)
-            const isBreastFeedingEntry = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
-            const isMilkFeeding = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeedingEntry;
+        const isBreastFeedingEntry = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
+        const isMilkFeeding = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeedingEntry;
 
-            if (type === 'sleep') {
-              const splitParts = getSplitSleepParts(item, dateStr);
-              if (splitParts.length > 1) {
-                expandedGroupedEntries[dateStr].push(splitParts[0]);
-                const nextDay = splitParts[1].targetDate;
-                if (nextDay) {
-                  if (!expandedGroupedEntries[nextDay]) expandedGroupedEntries[nextDay] = [];
-                  expandedGroupedEntries[nextDay].push(splitParts[1]);
-                }
-              } else {
-                expandedGroupedEntries[dateStr].push(item);
-              }
-            } else if (filterType === 'all') {
-              // 💡 Default: Afișăm absolut tot
-              expandedGroupedEntries[dateStr].push(item);
-            } else if (filterType === 'mama') {
-              if (type === 'mama' || type === 'alaptare' || isBreastFeedingEntry) {
-                expandedGroupedEntries[dateStr].push(item);
-              }
-            } else if (filterType === 'milk') {
-              // 💡 În filtrul de lapte, includem tot ce e legat de lapte / sân (inclusiv fără ml sau cu 0 ml)
-              if (isMilkFeeding) {
-                expandedGroupedEntries[dateStr].push(item);
-              }
-            } else if (type === filterType) {
-              expandedGroupedEntries[dateStr].push(item);
+        if (type === 'sleep') {
+          const splitParts = getSplitSleepParts(item, dateStr);
+          if (splitParts.length > 1) {
+            expandedGroupedEntries[dateStr].push(splitParts[0]);
+            const nextDay = splitParts[1].targetDate;
+            if (nextDay) {
+              if (!expandedGroupedEntries[nextDay]) expandedGroupedEntries[nextDay] = [];
+              expandedGroupedEntries[nextDay].push(splitParts[1]);
             }
-          });
+          } else {
+            expandedGroupedEntries[dateStr].push(item);
+          }
+        } else if (filterType === 'all') {
+          expandedGroupedEntries[dateStr].push(item);
+        } else if (filterType === 'mama') {
+          if (type === 'mama' || type === 'alaptare' || isBreastFeedingEntry) {
+            expandedGroupedEntries[dateStr].push(item);
+          }
+        } else if (filterType === 'milk') {
+          if (isMilkFeeding) {
+            expandedGroupedEntries[dateStr].push(item);
+          }
+        } else if (type === filterType) {
+          expandedGroupedEntries[dateStr].push(item);
+        }
+      });
     });
   }
 
@@ -419,11 +415,9 @@ export default function HistorySection({
                         key={itemKey}
                         style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
                         onLongPress={() => {
-                          Alert.alert(t.actionTitle, t.actionSub, [
-                            { text: t.cancel, style: 'cancel' },
-                            { text: t.edit, onPress: () => handleOpenEditModal({ ...item, id: realIdForAction }) },
-                            { text: t.delete, style: 'destructive', onPress: () => handleDeleteEntry(realIdForAction) },
-                          ]);
+                          if (onOpenActionModal) {
+                            onOpenActionModal({ ...item, id: realIdForAction, date: dateStr, time: item.time });
+                          }
                         }}
                       >
                         <View style={[styles.row, { flex: 1, marginRight: 8 }]}>

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, StatusBar } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, StatusBar, AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,7 +9,8 @@ import ActivityMenuGrid from '../components/ActivityMenuGrid';
 import ActiveSleepBanner from '../components/ActiveSleepBanner';
 import HistorySection from '../components/HistorySection';
 import EditEntryModal from '../components/EditEntryModal';
-import StatsDashboard from '../components/StatsDashboard'; // <-- Componenta nouă pentru grafice
+import ActionModal from '../components/ActionModal';
+import StatsDashboard from '../components/StatsDashboard';
 
 import {
   getLocalEntries,
@@ -43,9 +44,7 @@ export default function HomeScreen({ navigation }) {
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
   const [currentLang, setCurrentLang] = useState('ro');
 
-  // Stare pentru toggle-ul graficelor din statistici
   const [showStats, setShowStats] = useState(false);
-
   const t = translations[currentLang] || translations.ro;
 
   const [filterType, setFilterType] = useState('all');
@@ -54,9 +53,12 @@ export default function HomeScreen({ navigation }) {
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentEditingItem, setCurrentEditingItem] = useState(null);
-  const [editedValue, setEditedValue] = useState('');
+
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [selectedItemForAction, setSelectedItemForAction] = useState(null);
 
   const isSyncingRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
 
   const cleanDate = (dateStr) => {
     if (!dateStr) return '';
@@ -160,6 +162,23 @@ export default function HomeScreen({ navigation }) {
       };
     }, [])
   );
+
+  // 💡 Forțează un refresh automat și proaspăt când aplicația revine din fundal în prim-plan
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        handleRefreshEntries();
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [sheetUrl, entries]);
 
   const performSync = async (targetUrl, currentLocalEntries = [], isDropsOn = false) => {
     if (!targetUrl) return;
@@ -349,7 +368,6 @@ export default function HomeScreen({ navigation }) {
     }
   });
 
-  // Sortare cronologică matematică în istoric pe baza orelor convertite în minute
   const allUniqueEntries = Array.from(entriesMap.values()).sort((a, b) => {
     const timeToMinutes = (timeStr) => {
       if (!timeStr) return 0;
@@ -433,7 +451,6 @@ export default function HomeScreen({ navigation }) {
   }, {});
 
   const sortedDates = Object.keys(groupedEntries).sort((a, b) => new Date(b) - new Date(a));
-
   const todayStr = getTodayDateString();
 
   const todayDropsItems = safeEntries.filter((item) => {
@@ -520,17 +537,7 @@ export default function HomeScreen({ navigation }) {
 
   const handleOpenEditModal = (item) => {
     setCurrentEditingItem(item);
-    setEditedValue(item.value || '');
     setEditModalVisible(true);
-  };
-
-  const handleConfirmEdit = async () => {
-    if (!currentEditingItem) return;
-    const forcedOffline = await getForceOffline();
-    const updated = await updateEntryValue(currentEditingItem, editedValue, entries, forcedOffline ? null : sheetUrl);
-    setEntries([...updated]);
-    setEditModalVisible(false);
-    setCurrentEditingItem(null);
   };
 
   const toggleDayCollapse = (dateKey) => {
@@ -553,7 +560,6 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* HeaderBar actualizat cu butonul de toggle pentru statistici */}
       <HeaderBar
         babyName={babyName}
         navigation={navigation}
@@ -569,7 +575,6 @@ export default function HomeScreen({ navigation }) {
       )}
 
       <View style={{ flex: 1 }}>
-        {/* Componenta de Grafice / Statistici plasată deasupra istoricului */}
         {showStats && (
           <StatsDashboard entries={allUniqueEntries} currentTheme={currentTheme} />
         )}
@@ -587,8 +592,10 @@ export default function HomeScreen({ navigation }) {
           toggleDayCollapse={toggleDayCollapse}
           cleanTime={cleanTime}
           getGrowthDifferenceText={getGrowthDifferenceText}
-          handleOpenEditModal={handleOpenEditModal}
-          handleDeleteEntry={handleDeleteEntry}
+          onOpenActionModal={(item) => {
+            setSelectedItemForAction(item);
+            setActionModalVisible(true);
+          }}
           translateType={translateType}
           t={t}
         />
@@ -617,14 +624,53 @@ export default function HomeScreen({ navigation }) {
         />
       </View>
 
+      {/* Meniul stilizat de acțiuni la long-press */}
+      <ActionModal
+        visible={actionModalVisible}
+        currentTheme={currentTheme}
+        t={t}
+        onClose={() => setActionModalVisible(false)}
+        onEdit={() => {
+          if (selectedItemForAction) {
+            handleOpenEditModal(selectedItemForAction);
+          }
+        }}
+        onDelete={() => {
+          if (selectedItemForAction) {
+            handleDeleteEntry(selectedItemForAction.originalId || selectedItemForAction.id);
+          }
+        }}
+      />
+
+      {/* Modalul de Editare */}
       <EditEntryModal
         visible={editModalVisible}
         currentTheme={currentTheme}
         t={t}
-        editedValue={editedValue}
-        setEditedValue={setEditedValue}
-        onClose={() => setEditModalVisible(false)}
-        onConfirm={handleConfirmEdit}
+        entryItem={currentEditingItem}
+        onClose={() => {
+          setEditModalVisible(false);
+          setCurrentEditingItem(null);
+        }}
+        onSave={async (updatedData) => {
+          const forcedOffline = await getForceOffline();
+          const updated = await updateEntryValue(
+            currentEditingItem,
+            updatedData.value,
+            entries,
+            forcedOffline ? null : sheetUrl
+          );
+
+          const finalEntries = entries.map(e =>
+            e.id === currentEditingItem.id ? updatedData : e
+          );
+
+          setEntries([...finalEntries]);
+          await saveLocalEntries(finalEntries);
+
+          setEditModalVisible(false);
+          setCurrentEditingItem(null);
+        }}
       />
     </SafeAreaView>
   );

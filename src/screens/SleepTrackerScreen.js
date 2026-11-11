@@ -30,11 +30,7 @@ import { translations } from '../services/translations';
 export default function SleepTrackerScreen() {
   const navigation = useNavigation();
 
-  // Stare nouă pentru data înregistrării (implicit data curentă)
-  const [entryDate, setEntryDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // Stări pentru ore
+  // Stări pentru date/ore
   const [startDate, setStartDate] = useState(new Date());
   const [showStartPicker, setShowStartPicker] = useState(false);
 
@@ -67,15 +63,6 @@ export default function SleepTrackerScreen() {
       isMounted = false;
     };
   }, []);
-
-  const onChangeEntryDate = (event, selectedDate) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (selectedDate) {
-      setEntryDate(selectedDate);
-    }
-  };
 
   const onChangeStartTime = (event, selectedDate) => {
     if (Platform.OS === 'android') {
@@ -110,12 +97,10 @@ export default function SleepTrackerScreen() {
     try {
       const now = new Date();
 
-      // Folosim data selectată din entryDate
-      const year = entryDate.getFullYear();
-      const month = String(entryDate.getMonth() + 1).padStart(2, '0');
-      const day = String(entryDate.getDate()).padStart(2, '0');
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
-
       const nowIsoString = now.toISOString().replace('T', ' ').substring(0, 19);
 
       const cleanStart = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -136,7 +121,7 @@ export default function SleepTrackerScreen() {
         time: cleanStart,
         type: 'sleep',
         value: valueText,
-        fullDateTime: `${dateStr} ${cleanStart}`,
+        fullDateTime: nowIsoString,
       };
 
       const currentEntries = await getLocalEntries();
@@ -162,84 +147,31 @@ export default function SleepTrackerScreen() {
     }
   };
 
-  const formatDateDisplay = (date) => {
-    return date.toLocaleDateString(currentLang === 'ro' ? 'ro-RO' : 'en-US', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-       {/* Buton Înapoi la Bebe */}
-               <TouchableOpacity
-                 style={[
-                   styles.backButtonLarge,
-                   {
-                     backgroundColor: currentTheme.cardBackground,
-                     borderColor: currentTheme.border,
-                   },
-                 ]}
-                 onPress={() => {
-                   if (navigation && navigation.canGoBack && navigation.canGoBack()) {
-                     navigation.goBack();
-                   } else {
-                     navigation.navigate('Home');
-                   }
-                 }}
-               >
-                 <Ionicons name="arrow-back-outline" size={20} color={currentTheme.textMain} style={{ marginRight: 8 }} />
-                 <Text style={[styles.backButtonLargeText, { color: currentTheme.textMain }]}>
-                   Înapoi
-                 </Text>
-               </TouchableOpacity>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack} disabled={isSubmitting}>
+          <Ionicons name="arrow-back" size={24} color={currentTheme.textMain} />
+        </TouchableOpacity>
 
         <Text style={[styles.title, { color: currentTheme.textMain }]}>
           {t.sleepTitle || 'Înregistrare Somn 🌙'}
         </Text>
 
-        {/* 📅 Selector Data Înregistrării */}
-        <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: currentTheme.textSub }]}>
-            {t.dateLabel || 'Data:'}
-          </Text>
-          <TouchableOpacity
-            style={[styles.pickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
-            onPress={() => setShowDatePicker(true)}
-            disabled={isSubmitting}
-          >
-            <Ionicons name="calendar-outline" size={20} color="#2980B9" style={{ marginRight: 8 }} />
-            <Text style={[styles.pickerText, { color: currentTheme.inputText }]}>
-              {formatDateDisplay(entryDate)}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {showDatePicker && (
-          <DateTimePicker
-            value={entryDate}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onChangeEntryDate}
-          />
-        )}
-
-        {/* 🌙 Ora Adormirii */}
+        {/* Ora Adormirii */}
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: currentTheme.textSub }]}>
             {t.sleepStartTimeLabel || 'Ora adormirii:'}
           </Text>
           <TouchableOpacity
-            style={[styles.pickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
+            style={[styles.timePickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
             onPress={() => setShowStartPicker(true)}
             disabled={isSubmitting}
           >
             <Ionicons name="moon-outline" size={20} color="#2980B9" style={{ marginRight: 8 }} />
-            <Text style={[styles.pickerText, { color: currentTheme.inputText }]}>
+            <Text style={[styles.timePickerText, { color: currentTheme.inputText }]}>
               {startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
             </Text>
           </TouchableOpacity>
@@ -255,7 +187,7 @@ export default function SleepTrackerScreen() {
           />
         )}
 
-        {/* ☀️ Toggle / Opțiune pentru Ora Trezirii */}
+        {/* Toggle / Opțiune pentru Ora Trezirii */}
         <View style={styles.inputGroup}>
           <View style={styles.rowBetween}>
             <Text style={[styles.label, { color: currentTheme.textSub }]}>
@@ -273,12 +205,12 @@ export default function SleepTrackerScreen() {
 
           {hasNextMorning && (
             <TouchableOpacity
-              style={[styles.pickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border, marginTop: 8 }]}
+              style={[styles.timePickerButton, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border, marginTop: 8 }]}
               onPress={() => setShowEndPicker(true)}
               disabled={isSubmitting}
             >
               <Ionicons name="sunny-outline" size={20} color="#E67E22" style={{ marginRight: 8 }} />
-              <Text style={[styles.pickerText, { color: currentTheme.inputText }]}>
+              <Text style={[styles.timePickerText, { color: currentTheme.inputText }]}>
                 {endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
               </Text>
             </TouchableOpacity>
@@ -320,34 +252,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  backButtonLarge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 11,
-      paddingHorizontal: 16,
-      borderRadius: 12,
-      marginBottom: 10,
-      borderWidth: 1,
-      elevation: 1,
-    },
-    backButtonLargeText: {
-      fontWeight: 'bold',
-      fontSize: 14,
-    },
+  backBtn: { marginTop: 10, marginBottom: 15 },
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
   inputGroup: { marginBottom: 18 },
   label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
-  pickerButton: {
+  timePickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
   },
-  pickerText: {
+  timePickerText: {
     fontSize: 15,
     fontWeight: 'bold',
   },
@@ -377,4 +295,3 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 });
-
