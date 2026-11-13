@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Modal,
   TouchableWithoutFeedback,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -17,9 +18,38 @@ export default function ActionModal({
   onEdit,
   onDelete,
 }) {
+  const [loadingAction, setLoadingAction] = useState(null); // 'edit' sau 'delete'
+
+  const handleEditPress = () => {
+    if (loadingAction) return;
+    setLoadingAction('edit');
+    // Mică întârziere opțională pentru a lăsa utilizatorul să vadă animația,
+    // apoi executăm acțiunea și închidem modalul
+    setTimeout(() => {
+      onEdit();
+      setLoadingAction(null);
+      onClose();
+    }, 150);
+  };
+
+  const handleDeletePress = () => {
+    if (loadingAction) return;
+    setLoadingAction('delete');
+    setTimeout(() => {
+      onDelete();
+      setLoadingAction(null);
+      onClose();
+    }, 150);
+  };
+
   return (
-    <Modal visible={visible} animationType="fade" transparent={true}>
-      <TouchableWithoutFeedback onPress={onClose}>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent={true}
+      onShow={() => setLoadingAction(null)} // Resetăm starea la deschidere
+    >
+      <TouchableWithoutFeedback onPress={loadingAction ? null : onClose}>
         <View style={[styles.modalOverlay, { backgroundColor: currentTheme.modalOverlay || 'rgba(0,0,0,0.6)' }]}>
           <TouchableWithoutFeedback>
             <View style={[styles.modalContent, { backgroundColor: currentTheme.modalBackground, borderColor: currentTheme.border }]}>
@@ -32,35 +62,41 @@ export default function ActionModal({
                     {t.actionTitle || 'Ce dorești să faci?'}
                   </Text>
                 </View>
-                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                  <Ionicons name="close" size={20} color={currentTheme.textSub} />
-                </TouchableOpacity>
+                {!loadingAction && (
+                  <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                    <Ionicons name="close" size={20} color={currentTheme.textSub} />
+                  </TouchableOpacity>
+                )}
               </View>
 
-              {/* Butoane de Acțiune pre luate din traduceri */}
+              {/* Butoane de Acțiune preluate din traduceri */}
               <View style={styles.actionsContainer}>
 
                 {/* Buton Editează */}
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#27AE60' }]}
-                  onPress={() => {
-                    onClose();
-                    onEdit();
-                  }}
+                  style={[styles.actionBtn, { backgroundColor: '#27AE60', opacity: loadingAction === 'delete' ? 0.5 : 1 }]}
+                  onPress={handleEditPress}
+                  disabled={loadingAction !== null}
                 >
-                  <Ionicons name="create-outline" size={16} color="#FFF" style={{ marginRight: 4 }} />
+                  {loadingAction === 'edit' ? (
+                    <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 6 }} />
+                  ) : (
+                    <Ionicons name="create-outline" size={16} color="#FFF" style={{ marginRight: 4 }} />
+                  )}
                   <Text style={styles.btnText}>{t.edit || 'Editează'}</Text>
                 </TouchableOpacity>
 
                 {/* Buton Șterge */}
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#E74C3C' }]}
-                  onPress={() => {
-                    onClose();
-                    onDelete();
-                  }}
+                  style={[styles.actionBtn, { backgroundColor: '#E74C3C', opacity: loadingAction === 'edit' ? 0.5 : 1 }]}
+                  onPress={handleDeletePress}
+                  disabled={loadingAction !== null}
                 >
-                  <Ionicons name="trash-outline" size={16} color="#FFF" style={{ marginRight: 4 }} />
+                  {loadingAction === 'delete' ? (
+                    <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 6 }} />
+                  ) : (
+                    <Ionicons name="trash-outline" size={16} color="#FFF" style={{ marginRight: 4 }} />
+                  )}
                   <Text style={styles.btnText}>{t.delete || 'Șterge'}</Text>
                 </TouchableOpacity>
 

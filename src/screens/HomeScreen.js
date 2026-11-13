@@ -8,6 +8,7 @@ import DropsBanner from '../components/DropsBanner';
 import ActivityMenuGrid from '../components/ActivityMenuGrid';
 import ActiveSleepBanner from '../components/ActiveSleepBanner';
 import HistorySection from '../components/HistorySection';
+import LastEventsSummary from '../components/LastEventsSummary'; // 💡 Componenta pentru ultima masă / somn
 import EditEntryModal from '../components/EditEntryModal';
 import ActionModal from '../components/ActionModal';
 import StatsDashboard from '../components/StatsDashboard';
@@ -45,6 +46,8 @@ export default function HomeScreen({ navigation }) {
   const [currentLang, setCurrentLang] = useState('ro');
 
   const [showStats, setShowStats] = useState(false);
+  const [showLastEventsBanner, setShowLastEventsBanner] = useState(true); // 💡 Starea pentru vizibilitatea bannerului pe header
+
   const t = translations[currentLang] || translations.ro;
 
   const [filterType, setFilterType] = useState('all');
@@ -163,7 +166,6 @@ export default function HomeScreen({ navigation }) {
     }, [])
   );
 
-  // 💡 Forțează un refresh automat și proaspăt când aplicația revine din fundal în prim-plan
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (
@@ -478,57 +480,57 @@ export default function HomeScreen({ navigation }) {
       : null;
 
   const handleWakeUp = async () => {
-    if (!activeSleepEntry || loading) return;
-    setLoading(true);
+      if (!activeSleepEntry || loading) return;
+      setLoading(true);
 
-    try {
-      const wakeTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      let sleepTimeStr = '';
-      const matchAdormit = String(activeSleepEntry.value || '').match(/Adormit la\s+([\d:A-Za-z\s]+)/i);
-      if (matchAdormit && matchAdormit[1]) {
-        sleepTimeStr = matchAdormit[1].trim();
-      } else {
-        sleepTimeStr = activeSleepEntry.time || '';
+      try {
+        const wakeTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let sleepTimeStr = '';
+        const matchAdormit = String(activeSleepEntry.value || '').match(/Adormit la\s+([\d:A-Za-z\s]+)/i);
+        if (matchAdormit && matchAdormit[1]) {
+          sleepTimeStr = matchAdormit[1].trim();
+        } else {
+          sleepTimeStr = activeSleepEntry.time || '';
+        }
+
+        const formattedValue = `Adormit la ${sleepTimeStr} - Trezit la ${wakeTime}`;
+        const cleanId = String(activeSleepEntry.id || '').replace(/^'/, '').trim();
+        const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        const updatedEntry = {
+          ...activeSleepEntry,
+          id: cleanId,
+          value: formattedValue,
+          fullDateTime: nowString,
+        };
+
+        // 💡 Actualizăm direct starea locală curentă pentru a reflecta instant modificarea în UI
+        const currentEntries = Array.isArray(entries) ? entries : [];
+        const updatedEntries = currentEntries.map((item) => {
+          const itemId = String(item?.id || '').replace(/^'/, '').trim();
+          return itemId === cleanId ? updatedEntry : item;
+        });
+
+        if (!updatedEntries.some((item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId)) {
+          updatedEntries.unshift(updatedEntry);
+        }
+
+        setEntries([...updatedEntries]);
+        await saveLocalEntries(updatedEntries);
+
+        const forcedOffline = await getForceOffline();
+        if (sheetUrl && !forcedOffline) {
+          // Trimitem în fundal la Google Sheets fără să blocăm UI-ul
+          sendToSheet(sheetUrl, updatedEntry).catch((err) => {
+            console.log('Eroare sincronizare trezire:', err);
+          });
+        }
+      } catch (e) {
+        console.error('Eroare la handleWakeUp:', e);
+      } finally {
+        setLoading(false);
       }
-
-      const formattedValue = `Adormit la ${sleepTimeStr} - Trezit la ${wakeTime}`;
-      const cleanId = String(activeSleepEntry.id || '').replace(/^'/, '').trim();
-      const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-      const updatedEntry = {
-        ...activeSleepEntry,
-        id: cleanId,
-        value: formattedValue,
-        fullDateTime: nowString,
-      };
-
-      const currentEntries = await getLocalEntries();
-      const safeCurrent = Array.isArray(currentEntries) ? currentEntries : [];
-
-      const updatedEntries = safeCurrent.map((item) => {
-        const itemId = String(item?.id || '').replace(/^'/, '').trim();
-        return itemId === cleanId ? updatedEntry : item;
-      });
-
-      if (!updatedEntries.some((item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId)) {
-        updatedEntries.unshift(updatedEntry);
-      }
-
-      setEntries([...updatedEntries]);
-      await saveLocalEntries(updatedEntries);
-
-      const forcedOffline = await getForceOffline();
-      if (sheetUrl && !forcedOffline) {
-        await sendToSheet(sheetUrl, updatedEntry);
-      }
-
-      await handleRefreshEntries();
-    } catch (e) {
-      console.error('Eroare la handleWakeUp:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   const handleDeleteEntry = async (itemId) => {
     const updated = await deleteEntryById(itemId, entries, sheetUrl);
@@ -566,6 +568,8 @@ export default function HomeScreen({ navigation }) {
         currentTheme={currentTheme}
         showStats={showStats}
         onToggleStats={() => setShowStats(!showStats)}
+        showLastEventsBanner={showLastEventsBanner}                     // 💡 Transmitem starea bannerului către HeaderBar
+        onToggleLastEventsBanner={() => setShowLastEventsBanner(!showLastEventsBanner)} // 💡 Funcția de toggle de pe Header
       />
 
       {isOffline && (
@@ -577,6 +581,18 @@ export default function HomeScreen({ navigation }) {
       <View style={{ flex: 1 }}>
         {showStats && (
           <StatsDashboard entries={allUniqueEntries} currentTheme={currentTheme} />
+        )}
+
+        {/* 💡 Afișăm LastEventsSummary sub header dacă este activat din toggle-ul de pe header */}
+        {showLastEventsBanner && (
+          <LastEventsSummary
+            entries={allUniqueEntries}
+            sortedDates={sortedDates}
+            groupedEntries={groupedEntries}
+            todayStr={todayStr}
+            cleanTime={cleanTime}
+            currentTheme={currentTheme}
+          />
         )}
 
         <HistorySection
@@ -652,24 +668,31 @@ export default function HomeScreen({ navigation }) {
           setEditModalVisible(false);
           setCurrentEditingItem(null);
         }}
-        onSave={async (updatedData) => {
-          const forcedOffline = await getForceOffline();
-          const updated = await updateEntryValue(
-            currentEditingItem,
-            updatedData.value,
-            entries,
-            forcedOffline ? null : sheetUrl
-          );
-
-          const finalEntries = entries.map(e =>
-            e.id === currentEditingItem.id ? updatedData : e
-          );
-
-          setEntries([...finalEntries]);
-          await saveLocalEntries(finalEntries);
-
+        onSave={(updatedData) => {
           setEditModalVisible(false);
           setCurrentEditingItem(null);
+
+          const finalEntries = entries.map(e => {
+            const eId = String(e?.id || '').trim();
+            const targetId = String(currentEditingItem?.id || '').trim();
+            return eId === targetId ? { ...e, ...updatedData } : e;
+          });
+
+          setEntries([...finalEntries]);
+          saveLocalEntries(finalEntries);
+
+          getForceOffline().then(async (forcedOffline) => {
+            if (!forcedOffline) {
+              updateEntryValue(
+                currentEditingItem,
+                updatedData.value,
+                entries,
+                sheetUrl
+              ).catch((err) => {
+                console.log('Eroare sincronizare fundal editare:', err);
+              });
+            }
+          });
         }}
       />
     </SafeAreaView>

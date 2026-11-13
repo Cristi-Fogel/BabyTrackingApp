@@ -284,3 +284,59 @@ export async function saveLanguage(lang) {
     console.error('Eroare la salvarea limbii:', e);
   }
 }
+
+const FONT_SIZE_KEY = '@baby_track_font_size';
+
+export const saveFontSize = async (size) => {
+  try {
+    await AsyncStorage.setItem(FONT_SIZE_KEY, size);
+  } catch (e) {
+    console.error('Eroare la salvarea dimensiunii fontului:', e);
+  }
+};
+
+export const getFontSize = async () => {
+  try {
+    const size = await AsyncStorage.getItem(FONT_SIZE_KEY);
+    return size || 'normal'; // valoarea implicită
+  } catch (e) {
+    console.error('Eroare la citirea dimensiunii fontului:', e);
+    return 'normal';
+  }
+};
+
+// Funcții pentru LastEvents default
+export const getLastEventsDefault = async () => {
+  try {
+    const value = await AsyncStorage.getItem('@BabyTrack_lastEventsDefault');
+    return value !== null ? JSON.parse(value) : true; // Default activ (true) sau false după preferință
+  } catch (e) {
+    return true;
+  }
+};
+
+export const saveLastEventsDefault = async (value) => {
+  try {
+    await AsyncStorage.setItem('@BabyTrack_lastEventsDefault', JSON.stringify(value));
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+// Funcții pentru Stats Dashboard default
+export const getStatsDefault = async () => {
+  try {
+    const value = await AsyncStorage.getItem('@BabyTrack_statsDefault');
+    return value !== null ? JSON.parse(value) : false; // Default ascuns (false)
+  } catch (e) {
+    return false;
+  }
+};
+
+export const saveStatsDefault = async (value) => {
+  try {
+    await AsyncStorage.setItem('@BabyTrack_statsDefault', JSON.stringify(value));
+  } catch (e) {
+    console.error(e);
+  }
+};

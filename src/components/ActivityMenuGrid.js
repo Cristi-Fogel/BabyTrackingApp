@@ -1,7 +1,7 @@
-import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
-import ZZZAnimation from './ZZZAnimation'; // Asigură-te că calea este corectă în funcție de unde ai plasat fișierul
+import ZZZAnimation from './ZZZAnimation';
 import {
   getLocalEntries,
   saveLocalEntries,
@@ -14,10 +14,11 @@ const { width } = Dimensions.get('window');
 const pageWidth = width - 24;
 
 export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setActiveMenuPage, currentTheme, onEntryAdded, activeSleepEntry }) {
+  const [loadingCard, setLoadingCard] = useState(null);
 
   const handleQuickSleepTap = async () => {
-    // Dacă există deja un somn activ, butonul este dezactivat și nu face nimic
-    if (activeSleepEntry) return;
+    if (activeSleepEntry || loadingCard) return;
+    setLoadingCard('sleep');
 
     try {
       const now = new Date();
@@ -47,7 +48,9 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
       if (!forcedOffline) {
         const sheetUrl = await getStoredSheetUrl();
         if (sheetUrl) {
-          await sendToSheet(sheetUrl, newEntry);
+          sendToSheet(sheetUrl, newEntry).catch((err) => {
+            console.log('Eroare sincronizare fundal somn rapid:', err);
+          });
         }
       }
 
@@ -56,7 +59,19 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
       }
     } catch (e) {
       console.error('Eroare la adăugarea rapidă a somnului:', e);
+    } finally {
+      setLoadingCard(null);
     }
+  };
+
+  const handleNavigationPress = (cardKey, screenName) => {
+    if (loadingCard) return;
+    setLoadingCard(cardKey);
+
+    setTimeout(() => {
+      navigation.navigate(screenName);
+      setLoadingCard(null);
+    }, 50);
   };
 
   return (
@@ -80,24 +95,38 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
         {/* Pagina 1 */}
         <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#E67E22' }]} onPress={() => navigation.navigate('MilkTracker')}>
-              <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
-              <Text style={styles.menuText}>{t.milk}</Text>
+            {/* Buton Lapte */}
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#E67E22', opacity: loadingCard && loadingCard !== 'milk' ? 0.6 : 1 }]}
+              onPress={() => handleNavigationPress('milk', 'MilkTracker')}
+              disabled={loadingCard !== null}
+            >
+              {loadingCard === 'milk' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <FontAwesome5 name="wine-bottle" size={18} color="#FFF" />
+                  <Text style={styles.menuText}>{t.milk}</Text>
+                </>
+              )}
             </TouchableOpacity>
 
-            {/* Butonul de Somn cu ZZZAnimation integrat */}
+            {/* Buton Somn */}
             <TouchableOpacity
               style={[
                 styles.menuCard,
-                { backgroundColor: activeSleepEntry ? '#7F8C8D' : '#2980B9' }
+                { backgroundColor: activeSleepEntry ? '#7F8C8D' : '#2980B9', opacity: loadingCard && loadingCard !== 'sleep' ? 0.6 : 1 }
               ]}
               onPress={handleQuickSleepTap}
               activeOpacity={activeSleepEntry ? 1 : 0.7}
+              disabled={activeSleepEntry ? true : loadingCard !== null}
             >
-              {activeSleepEntry ? (
+              {loadingCard === 'sleep' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : activeSleepEntry ? (
                 <View style={styles.sleepActiveContainer}>
                   <ZZZAnimation textStyle={{ color: '#FFF', fontSize: 13 }} />
-                  <Text style={[styles.menuText, { marginLeft: 4 }]}>Dormind</Text>
+                  <Text style={[styles.menuText, { marginLeft: 4 }]}>Doarme</Text>
                 </View>
               ) : (
                 <>
@@ -109,13 +138,36 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
           </View>
 
           <View style={[styles.menuRow, { marginTop: 6 }]}>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#27AE60' }]} onPress={() => navigation.navigate('GrowthTracker')}>
-              <MaterialCommunityIcons name="ruler" size={20} color="#FFF" />
-              <Text style={styles.menuText}>{t.growth}</Text>
+            {/* Buton Creștere */}
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#27AE60', opacity: loadingCard && loadingCard !== 'growth' ? 0.6 : 1 }]}
+              onPress={() => handleNavigationPress('growth', 'GrowthTracker')}
+              disabled={loadingCard !== null}
+            >
+              {loadingCard === 'growth' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="ruler" size={20} color="#FFF" />
+                  <Text style={styles.menuText}>{t.growth}</Text>
+                </>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#D81B60' }]} onPress={() => navigation.navigate('Mama')}>
-              <Ionicons name="woman-outline" size={20} color="#FFF" />
-              <Text style={styles.menuText}>{t.mama}</Text>
+
+            {/* Buton Mama */}
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#D81B60', opacity: loadingCard && loadingCard !== 'mama' ? 0.6 : 1 }]}
+              onPress={() => handleNavigationPress('mama', 'Mama')}
+              disabled={loadingCard !== null}
+            >
+              {loadingCard === 'mama' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="woman-outline" size={20} color="#FFF" />
+                  <Text style={styles.menuText}>{t.mama}</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -156,22 +208,37 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
               <Text style={styles.menuText}>Remindere</Text>
             </TouchableOpacity>
 
+            {/* Buton Alarme (Navigare Standard) */}
             <TouchableOpacity
-              style={[styles.menuCard, { backgroundColor: '#C0392B' }]}
-              onPress={() => navigation.navigate ? navigation.navigate('Alarms') : Alert.alert('Alarme', 'Ecranul de alarme se va deschide aici.')}
+              style={[styles.menuCard, { backgroundColor: '#C0392B', opacity: loadingCard && loadingCard !== 'alarms' ? 0.6 : 1 }]}
+              onPress={() => handleNavigationPress('alarms', 'Alarms')}
+              disabled={loadingCard !== null}
             >
-              <Ionicons name="alarm-outline" size={20} color="#FFF" />
-              <Text style={styles.menuText}>Alarme</Text>
+              {loadingCard === 'alarms' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="alarm-outline" size={20} color="#FFF" />
+                  <Text style={styles.menuText}>Alarme</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 
           <View style={[styles.menuRow, { marginTop: 6 }]}>
             <TouchableOpacity
-              style={[styles.menuCard, { backgroundColor: '#1B4F72', flex: 1 }]}
-              onPress={() => navigation.navigate('SleepTracker')}
+              style={[styles.menuCard, { backgroundColor: '#1B4F72', flex: 1, opacity: loadingCard && loadingCard !== 'detailsleep' ? 0.6 : 1 }]}
+              onPress={() => handleNavigationPress('detailsleep', 'SleepTracker')}
+              disabled={loadingCard !== null}
             >
-              <Ionicons name="moon" size={18} color="#FFF" />
-              <Text style={styles.menuText}>Sleep Tracker Detaliat</Text>
+              {loadingCard === 'detailsleep' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="moon" size={18} color="#FFF" />
+                  <Text style={styles.menuText}>Sleep Tracker Detaliat</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0, flex: 1, marginHorizontal: 3 }]} />

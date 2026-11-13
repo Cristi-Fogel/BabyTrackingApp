@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import ZZZAnimation from './ZZZAnimation';
+import { getFontSize } from '../services/storage';
 
 export default function HistorySection({
   currentTheme,
@@ -15,10 +17,42 @@ export default function HistorySection({
   collapsedDays,
   toggleDayCollapse,
   cleanTime,
-  onOpenActionModal, // 💡 Înlocuit cu prop-ul pentru modalul personalizat de acțiuni
+  onOpenActionModal,
   translateType,
   t,
 }) {
+  const [fontSizeSetting, setFontSizeSetting] = useState('normal');
+
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const loadFontSetting = async () => {
+        const fSize = await getFontSize();
+        if (isMounted) {
+          setFontSizeSetting(fSize || 'normal');
+        }
+      };
+      loadFontSetting();
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
+
+  const getDynamicStyles = () => {
+    if (fontSizeSetting === 'small') {
+      return { title: 10, sub: 9, value: 11, header: 10, stat: 9 };
+    } else if (fontSizeSetting === 'large') {
+      return { title: 14, sub: 12, value: 15, header: 13, stat: 11 };
+    } else if (fontSizeSetting === 'extraLarge') {
+      return { title: 18, sub: 15, value: 19, header: 16, stat: 13 };
+    }
+    // Normal (default)
+    return { title: 11, sub: 10, value: 12, header: 12, stat: 10 };
+  };
+
+  const dynamicFont = getDynamicStyles();
+
   const parseTimeToMinutes = (timeStr) => {
     if (!timeStr) return null;
     const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -61,6 +95,9 @@ export default function HistorySection({
 
   const getSplitSleepParts = (item, dateStr) => {
     const val = String(item?.value || '');
+    const isSleepingNow = val.toLowerCase().includes('adormit la') && !val.toLowerCase().includes('trezit la');
+    if (isSleepingNow) return [{ ...item, displayPart: 'active' }];
+
     const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
     const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
 
@@ -92,15 +129,17 @@ export default function HistorySection({
     const totalSleepMinutes = ((24 * 60) - startMin) + endMin;
     const totalDurationText = formatDuration(totalSleepMinutes);
 
+    // Prima parte (ziua precedenta): Fără durată și marcată corect să nu apară ca activă
     const part1 = {
       ...item,
       id: `${item.id}_part1`,
       originalId: item.id,
       displayPart: 'first',
-      value: `Adormit la ${sleepStr} - Trezit la 12:00 AM (A doua zi)`,
-      customDurationLabel: totalDurationText,
+      value: `Adormit la ${sleepStr}`,
+      customDurationLabel: '',
     };
 
+    // A doua parte (ziua următoare): Afișează durata totală la trezire
     const part2 = {
       ...item,
       id: `${item.id}_part2`,
@@ -114,15 +153,20 @@ export default function HistorySection({
     return [part1, part2];
   };
 
-  const renderSleepDetails = (value) => {
-    if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>-</Text>;
+  const renderSleepDetails = (value, item) => {
+    if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint, fontSize: dynamicFont.value }]}>-</Text>;
 
-    const isSleepingNow = value.toLowerCase().includes('adormit la') && !value.toLowerCase().includes('trezit la');
+    // Verificăm dacă este somn în desfășurare real (doar dacă e activ și nu face parte dintr-un split completat)
+    const isSleepingNow =
+      value.toLowerCase().includes('adormit la') &&
+      !value.toLowerCase().includes('trezit la') &&
+      item?.displayPart === 'active';
+
     if (isSleepingNow) {
       return (
         <View style={[styles.sleepDetailsContainer, { flexDirection: 'row', alignItems: 'center' }]}>
-          <ZZZAnimation style={{ marginRight: 4 }} textStyle={{ color: '#2980B9', fontSize: 11 }} />
-          <Text style={[styles.sleepDetailTextActive, { color: '#2980B9' }]}>Doarme încă...</Text>
+          <ZZZAnimation style={{ marginRight: 4 }} textStyle={{ color: '#2980B9', fontSize: dynamicFont.sub }} />
+          <Text style={[styles.sleepDetailTextActive, { color: '#2980B9', fontSize: dynamicFont.sub }]}>Doarme încă...</Text>
         </View>
       );
     }
@@ -139,20 +183,20 @@ export default function HistorySection({
           {sleepTimeStr ? (
             <View style={styles.sleepDetailRow}>
               <Ionicons name="moon" size={13} color="#2980B9" style={{ marginRight: 4 }} />
-              <Text style={[styles.sleepDetailTextSleep, { color: '#2980B9' }]}>{sleepTimeStr}</Text>
+              <Text style={[styles.sleepDetailTextSleep, { color: '#2980B9', fontSize: dynamicFont.sub }]}>{sleepTimeStr}</Text>
             </View>
           ) : null}
           {wakeTimeStr ? (
             <View style={[styles.sleepDetailRow, { marginTop: 2 }]}>
               <Ionicons name="sunny" size={13} color="#E67E22" style={{ marginRight: 4 }} />
-              <Text style={[styles.sleepDetailTextWake, { color: '#E67E22' }]}>{wakeTimeStr}</Text>
+              <Text style={[styles.sleepDetailTextWake, { color: '#E67E22', fontSize: dynamicFont.sub }]}>{wakeTimeStr}</Text>
             </View>
           ) : null}
         </View>
       );
     }
 
-    return <Text style={[styles.historyValue, { color: currentTheme.tint }]}>{value}</Text>;
+    return <Text style={[styles.historyValue, { color: currentTheme.tint, fontSize: dynamicFont.value }]}>{value}</Text>;
   };
 
   const renderIconForType = (type, value) => {
@@ -186,6 +230,7 @@ export default function HistorySection({
       const type = String(item?.type || '').toLowerCase();
       const val = String(item?.value || '');
 
+      // 1. Calcul lapte
       if (type === 'milk' || type === 'lapte' || type === 'alaptare' || val.toLowerCase().includes('sân')) {
         const mlMatch = val.match(/(\d+)\s*ml/i);
         if (mlMatch) {
@@ -193,33 +238,38 @@ export default function HistorySection({
         }
       }
 
+      // 2. Calcul somn: adunăm doar de pe rândurile care au durată calculată
       if (type === 'sleep') {
-        const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|\s*Trezit|$)/i);
-        const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s ]+?)(?=\s*-|$)/i);
+        const durationSource = item.customDurationLabel || '';
+        const hMatch = durationSource.match(/(\d+)\s*h/i);
+        const mMatch = durationSource.match(/(\d+)\s*m/i);
 
-        if (sleepMatch && wakeMatch) {
-          const startMin = parseTimeToMinutes(sleepMatch[1].trim());
-          const endMin = parseTimeToMinutes(wakeMatch[1].trim());
-          if (startMin !== null && endMin !== null) {
-            let diff = endMin - startMin;
-            if (diff < 0) {
-              if (item.displayPart === 'first') {
-                diff = (24 * 60) - startMin;
-              } else if (item.displayPart === 'second') {
-                diff = endMin;
-              } else {
-                diff += 24 * 60;
-              }
+        if (hMatch || mMatch) {
+          const hours = hMatch ? parseInt(hMatch[1], 10) : 0;
+          const mins = mMatch ? parseInt(mMatch[1], 10) : 0;
+          totalSleepMinutes += (hours * 60) + mins;
+        } else if (!item.displayPart || item.displayPart === 'full') {
+          const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s]+?)(?=\s*-|\s*Trezit|$)/i);
+          const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
+
+          if (sleepMatch && wakeMatch) {
+            const startMin = parseTimeToMinutes(sleepMatch[1].trim());
+            const endMin = parseTimeToMinutes(wakeMatch[1].trim());
+            if (startMin !== null && endMin !== null) {
+              let diff = endMin - startMin;
+              if (diff > 0) totalSleepMinutes += diff;
             }
-            totalSleepMinutes += diff;
           }
         }
       }
     });
 
-    const sleepHours = (totalSleepMinutes / 60).toFixed(1);
-    const awakeMinutesTotal = Math.max(0, 24 * 60 - totalSleepMinutes);
-    const awakeHours = (awakeMinutesTotal / 60).toFixed(1);
+    const sleepHoursNum = totalSleepMinutes / 60;
+    const clampedSleepHours = Math.min(24.0, sleepHoursNum);
+    const sleepHours = clampedSleepHours.toFixed(1);
+
+    const awakeHoursNum = Math.max(0.0, 24.0 - clampedSleepHours);
+    const awakeHours = awakeHoursNum.toFixed(1);
 
     return { totalMilk, sleepHours, awakeHours };
   };
@@ -383,14 +433,14 @@ export default function HistorySection({
                   <View style={styles.rowBetween}>
                     <View style={styles.row}>
                       <Ionicons name={isCollapsed ? 'chevron-forward' : 'chevron-down'} size={16} color={currentTheme.textMain} style={{ marginRight: 6 }} />
-                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain }]}>📅 {displayDateLabel}</Text>
+                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain, fontSize: dynamicFont.header }]}>📅 {displayDateLabel}</Text>
                     </View>
                     <View style={styles.row}>
-                      {stats.totalMilk > 0 && <Text style={[styles.dayStatText, { color: '#D35400', marginRight: 6 }]}>🍼 {stats.totalMilk}ml</Text>}
+                      {stats.totalMilk > 0 && <Text style={[styles.dayStatText, { color: '#D35400', marginRight: 6, fontSize: dynamicFont.stat }]}>🍼 {stats.totalMilk}ml</Text>}
                       {!hideSunMoon && (
                         <>
-                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 6 }]}>☀️ {stats.awakeHours}h</Text>
-                          <Text style={[styles.dayStatText, { color: '#2980B9' }]}>🌙 {stats.sleepHours}h</Text>
+                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 6, fontSize: dynamicFont.stat }]}>☀️ {stats.awakeHours}h</Text>
+                          <Text style={[styles.dayStatText, { color: '#2980B9', fontSize: dynamicFont.stat }]}>🌙 {stats.sleepHours}h</Text>
                         </>
                       )}
                     </View>
@@ -423,16 +473,16 @@ export default function HistorySection({
                         <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
                           {renderIconForType(item?.type, item?.value)}
                           <View style={{ flex: 1 }}>
-                            <Text style={[styles.historyType, { color: currentTheme.textMain }]}>
+                            <Text style={[styles.historyType, { color: currentTheme.textMain, fontSize: dynamicFont.title }]}>
                               {translateType(item?.type)}
                             </Text>
                             {isGrowth ? (
                               <View style={{ marginTop: 2 }}>
-                                {heightDiff ? <Text style={styles.growthSubText}>📏 {heightDiff}</Text> : null}
-                                {weightDiff ? <Text style={styles.growthSubText}>⚖️ {weightDiff}</Text> : null}
+                                {heightDiff ? <Text style={[styles.growthSubText, { fontSize: dynamicFont.sub }]}>📏 {heightDiff}</Text> : null}
+                                {weightDiff ? <Text style={[styles.growthSubText, { fontSize: dynamicFont.sub }]}>⚖️ {weightDiff}</Text> : null}
                               </View>
                             ) : (
-                              <Text style={[styles.historyDateTime, { color: currentTheme.textSub }]}>
+                              <Text style={[styles.historyDateTime, { color: currentTheme.textSub, fontSize: dynamicFont.sub }]}>
                                 {isSleep && sleepDurationLabel ? sleepDurationLabel : formattedTime}
                               </Text>
                             )}
@@ -440,8 +490,8 @@ export default function HistorySection({
                         </View>
 
                         <View style={styles.valueRightContainer}>
-                          {isSleep ? renderSleepDetails(item?.value) : (
-                            <Text style={[styles.historyValue, { color: isGrowth ? '#27AE60' : currentTheme.tint }]}>
+                          {isSleep ? renderSleepDetails(item?.value, item) : (
+                            <Text style={[styles.historyValue, { color: isGrowth ? '#27AE60' : currentTheme.tint, fontSize: dynamicFont.value }]}>
                               {item?.value ? item.value : '-'}
                             </Text>
                           )}
@@ -467,19 +517,19 @@ const styles = StyleSheet.create({
   filterIconChipActive: { backgroundColor: '#D35400', borderColor: '#D35400' },
   dayGroupContainer: { marginBottom: 6 },
   dayHeaderRow: { padding: 6, borderRadius: 6, borderWidth: 1, marginBottom: 4 },
-  dayHeaderTitle: { fontSize: 12, fontWeight: 'bold' },
-  dayStatText: { fontSize: 10, fontWeight: 'bold' },
+  dayHeaderTitle: { fontWeight: 'bold' },
+  dayStatText: { fontWeight: 'bold' },
   historyList: { flex: 1, marginTop: 2 },
   historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, paddingLeft: 10 },
-  historyType: { fontWeight: 'bold', fontSize: 11 },
-  historyDateTime: { fontSize: 10, marginTop: 1, fontWeight: '500' },
-  growthSubText: { fontSize: 10, fontWeight: '600', color: '#27AE60', marginTop: 1 },
+  historyType: { fontWeight: 'bold' },
+  historyDateTime: { marginTop: 1, fontWeight: '500' },
+  growthSubText: { fontWeight: '600', color: '#27AE60', marginTop: 1 },
   valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center', paddingTop: 2 },
-  historyValue: { fontSize: 12, fontWeight: 'bold', textAlign: 'right' },
+  historyValue: { fontWeight: 'bold', textAlign: 'right' },
   emptyText: { textAlign: 'center', marginTop: 10, fontSize: 12 },
   sleepDetailsContainer: { alignItems: 'flex-end' },
   sleepDetailRow: { flexDirection: 'row', alignItems: 'center' },
-  sleepDetailTextSleep: { fontSize: 11, fontWeight: 'bold' },
-  sleepDetailTextWake: { fontSize: 11, fontWeight: 'bold' },
-  sleepDetailTextActive: { fontSize: 11, fontWeight: 'bold' },
+  sleepDetailTextSleep: { fontWeight: 'bold' },
+  sleepDetailTextWake: { fontWeight: 'bold' },
+  sleepDetailTextActive: { fontWeight: 'bold' },
 });

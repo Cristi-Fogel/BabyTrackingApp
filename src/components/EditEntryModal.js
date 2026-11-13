@@ -34,7 +34,8 @@ export default function EditEntryModal({
       setEditedDate(entryItem.date || '');
       setEditedTime(entryItem.time || '');
 
-      const isMilk = String(entryItem.type || '').toLowerCase() === 'milk' || String(entryItem.type || '').toLowerCase() === 'lapte';
+      const typeLower = String(entryItem.type || '').toLowerCase();
+      const isMilk = typeLower === 'milk' || typeLower === 'lapte';
 
       if (isMilk) {
         const valStr = String(entryItem.value || '');
@@ -57,10 +58,10 @@ export default function EditEntryModal({
           setMilkSource(cleanedSource || valStr);
         }
       } else {
+        // 💡 Pentru somn, creștere și alte tipuri, preluăm direct valoarea existentă
         setEditedValue(entryItem.value || '');
       }
 
-      // 💡 Folosim opțional chaining `?.` ca să evităm orice eroare de referință nullă
       setTimeout(() => {
         if (isMilk) {
           milkAmountInputRef.current?.focus();
@@ -72,7 +73,8 @@ export default function EditEntryModal({
   }, [visible, entryItem]);
 
   const handleConfirm = () => {
-    const isMilk = entryItem && (String(entryItem.type || '').toLowerCase() === 'milk' || String(entryItem.type || '').toLowerCase() === 'lapte');
+    const typeLower = entryItem ? String(entryItem.type || '').toLowerCase() : '';
+    const isMilk = typeLower === 'milk' || typeLower === 'lapte';
 
     let finalValue = editedValue;
     if (isMilk) {
@@ -86,14 +88,15 @@ export default function EditEntryModal({
       ...(entryItem || {}),
       date: editedDate,
       time: editedTime,
-      value: finalValue,
+      value: finalValue, // 💡 Valoarea editată corect pentru somn sau alte tipuri
       fullDateTime: `${editedDate} ${editedTime}`,
     };
 
     onSave(updatedData);
   };
 
-  const isMilkEntry = entryItem && (String(entryItem.type || '').toLowerCase() === 'milk' || String(entryItem.type || '').toLowerCase() === 'lapte');
+  const typeLower = entryItem ? String(entryItem.type || '').toLowerCase() : '';
+  const isMilkEntry = typeLower === 'milk' || typeLower === 'lapte';
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true}>
@@ -129,7 +132,6 @@ export default function EditEntryModal({
                   onChangeText={setEditedDate}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor={currentTheme.inputPlaceholder}
-                  selectTextOnFocus={true}
                 />
               </View>
 
@@ -141,12 +143,11 @@ export default function EditEntryModal({
                   onChangeText={setEditedTime}
                   placeholder="ex: 11:23 AM"
                   placeholderTextColor={currentTheme.inputPlaceholder}
-                  selectTextOnFocus={true}
                 />
               </View>
             </View>
 
-            {/* Câmpuri Lapte vs General */}
+            {/* Câmpuri Lapte vs General (Somn, etc.) */}
             {isMilkEntry ? (
               <>
                 <Text style={[styles.fieldLabel, { color: currentTheme.textSub }]}>Cantitate (ml)</Text>
@@ -158,7 +159,6 @@ export default function EditEntryModal({
                   keyboardType="numeric"
                   placeholder="Ex: 90"
                   placeholderTextColor={currentTheme.inputPlaceholder}
-                  selectTextOnFocus={true}
                 />
 
                 <Text style={[styles.fieldLabel, { color: currentTheme.textSub }]}>Sursă / Detalii</Text>
@@ -168,12 +168,11 @@ export default function EditEntryModal({
                   onChangeText={setMilkSource}
                   placeholder="Lapte praf"
                   placeholderTextColor={currentTheme.inputPlaceholder}
-                  selectTextOnFocus={true}
                 />
               </>
             ) : (
               <>
-                <Text style={[styles.fieldLabel, { color: currentTheme.textSub }]}>Valoare / Detalii</Text>
+                <Text style={[styles.fieldLabel, { color: currentTheme.textSub }]}>Valoare / Detalii (ex: Interval somn)</Text>
                 <TextInput
                   ref={generalValueInputRef}
                   style={[styles.modalInput, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
@@ -181,7 +180,6 @@ export default function EditEntryModal({
                   onChangeText={setEditedValue}
                   placeholder={t.editPlaceholder || 'Valoare'}
                   placeholderTextColor={currentTheme.inputPlaceholder}
-                  selectTextOnFocus={true}
                 />
               </>
             )}

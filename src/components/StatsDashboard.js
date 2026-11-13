@@ -10,11 +10,10 @@ export default function StatsDashboard({ entries, currentTheme }) {
   const scrollViewRef = useRef(null);
 
   const scrollToCurrent = () => {
-    if (scrollViewRef.current) {
-      setTimeout(() => {
-        scrollViewRef.current.scrollToEnd({ animated: true });
-      }, 150);
-    }
+    // 💡 Adăugat opțional chaining (?.) pentru a preveni eroarea dacă referința este null
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 150);
   };
 
   useEffect(() => {
@@ -191,7 +190,7 @@ export default function StatsDashboard({ entries, currentTheme }) {
         const midWeekDate = new Date(now);
         midWeekDate.setDate(midWeekDate.getDate() - (i * 7 + 3));
         const monthName = midWeekDate.toLocaleDateString('ro-RO', { month: 'short' });
-        const weekNum = step - i; // Numărul săptămânii în serie (1, 2, 3...)
+        const weekNum = step - i;
 
         for (let j = 0; j < 7; j++) {
           const d = new Date(now);
