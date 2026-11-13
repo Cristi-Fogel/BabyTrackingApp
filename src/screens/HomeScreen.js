@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, StatusBar } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, StatusBar, AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,8 +8,10 @@ import DropsBanner from '../components/DropsBanner';
 import ActivityMenuGrid from '../components/ActivityMenuGrid';
 import ActiveSleepBanner from '../components/ActiveSleepBanner';
 import HistorySection from '../components/HistorySection';
+import LastEventsSummary from '../components/LastEventsSummary'; // 💡 Componenta pentru ultima masă / somn
 import EditEntryModal from '../components/EditEntryModal';
-import StatsDashboard from '../components/StatsDashboard'; // <-- Componenta nouă pentru grafice
+import ActionModal from '../components/ActionModal';
+import StatsDashboard from '../components/StatsDashboard';
 
 import {
   getLocalEntries,
@@ -43,8 +45,8 @@ export default function HomeScreen({ navigation }) {
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
   const [currentLang, setCurrentLang] = useState('ro');
 
-  // Stare pentru toggle-ul graficelor din statistici
   const [showStats, setShowStats] = useState(false);
+  const [showLastEventsBanner, setShowLastEventsBanner] = useState(true); // 💡 Starea pentru vizibilitatea bannerului pe header
 
   const t = translations[currentLang] || translations.ro;
 
@@ -54,9 +56,12 @@ export default function HomeScreen({ navigation }) {
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentEditingItem, setCurrentEditingItem] = useState(null);
-  const [editedValue, setEditedValue] = useState('');
+
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [selectedItemForAction, setSelectedItemForAction] = useState(null);
 
   const isSyncingRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
 
   const cleanDate = (dateStr) => {
     if (!dateStr) return '';
@@ -160,6 +165,22 @@ export default function HomeScreen({ navigation }) {
       };
     }, [])
   );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        handleRefreshEntries();
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [sheetUrl, entries]);
 
   const performSync = async (targetUrl, currentLocalEntries = [], isDropsOn = false) => {
     if (!targetUrl) return;
@@ -349,7 +370,6 @@ export default function HomeScreen({ navigation }) {
     }
   });
 
-  // Sortare cronologică matematică în istoric pe baza orelor convertite în minute
   const allUniqueEntries = Array.from(entriesMap.values()).sort((a, b) => {
     const timeToMinutes = (timeStr) => {
       if (!timeStr) return 0;
@@ -433,7 +453,6 @@ export default function HomeScreen({ navigation }) {
   }, {});
 
   const sortedDates = Object.keys(groupedEntries).sort((a, b) => new Date(b) - new Date(a));
-
   const todayStr = getTodayDateString();
 
   const todayDropsItems = safeEntries.filter((item) => {
@@ -461,57 +480,57 @@ export default function HomeScreen({ navigation }) {
       : null;
 
   const handleWakeUp = async () => {
-    if (!activeSleepEntry || loading) return;
-    setLoading(true);
+      if (!activeSleepEntry || loading) return;
+      setLoading(true);
 
-    try {
-      const wakeTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      let sleepTimeStr = '';
-      const matchAdormit = String(activeSleepEntry.value || '').match(/Adormit la\s+([\d:A-Za-z\s]+)/i);
-      if (matchAdormit && matchAdormit[1]) {
-        sleepTimeStr = matchAdormit[1].trim();
-      } else {
-        sleepTimeStr = activeSleepEntry.time || '';
+      try {
+        const wakeTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let sleepTimeStr = '';
+        const matchAdormit = String(activeSleepEntry.value || '').match(/Adormit la\s+([\d:A-Za-z\s]+)/i);
+        if (matchAdormit && matchAdormit[1]) {
+          sleepTimeStr = matchAdormit[1].trim();
+        } else {
+          sleepTimeStr = activeSleepEntry.time || '';
+        }
+
+        const formattedValue = `Adormit la ${sleepTimeStr} - Trezit la ${wakeTime}`;
+        const cleanId = String(activeSleepEntry.id || '').replace(/^'/, '').trim();
+        const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        const updatedEntry = {
+          ...activeSleepEntry,
+          id: cleanId,
+          value: formattedValue,
+          fullDateTime: nowString,
+        };
+
+        // 💡 Actualizăm direct starea locală curentă pentru a reflecta instant modificarea în UI
+        const currentEntries = Array.isArray(entries) ? entries : [];
+        const updatedEntries = currentEntries.map((item) => {
+          const itemId = String(item?.id || '').replace(/^'/, '').trim();
+          return itemId === cleanId ? updatedEntry : item;
+        });
+
+        if (!updatedEntries.some((item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId)) {
+          updatedEntries.unshift(updatedEntry);
+        }
+
+        setEntries([...updatedEntries]);
+        await saveLocalEntries(updatedEntries);
+
+        const forcedOffline = await getForceOffline();
+        if (sheetUrl && !forcedOffline) {
+          // Trimitem în fundal la Google Sheets fără să blocăm UI-ul
+          sendToSheet(sheetUrl, updatedEntry).catch((err) => {
+            console.log('Eroare sincronizare trezire:', err);
+          });
+        }
+      } catch (e) {
+        console.error('Eroare la handleWakeUp:', e);
+      } finally {
+        setLoading(false);
       }
-
-      const formattedValue = `Adormit la ${sleepTimeStr} - Trezit la ${wakeTime}`;
-      const cleanId = String(activeSleepEntry.id || '').replace(/^'/, '').trim();
-      const nowString = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-      const updatedEntry = {
-        ...activeSleepEntry,
-        id: cleanId,
-        value: formattedValue,
-        fullDateTime: nowString,
-      };
-
-      const currentEntries = await getLocalEntries();
-      const safeCurrent = Array.isArray(currentEntries) ? currentEntries : [];
-
-      const updatedEntries = safeCurrent.map((item) => {
-        const itemId = String(item?.id || '').replace(/^'/, '').trim();
-        return itemId === cleanId ? updatedEntry : item;
-      });
-
-      if (!updatedEntries.some((item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId)) {
-        updatedEntries.unshift(updatedEntry);
-      }
-
-      setEntries([...updatedEntries]);
-      await saveLocalEntries(updatedEntries);
-
-      const forcedOffline = await getForceOffline();
-      if (sheetUrl && !forcedOffline) {
-        await sendToSheet(sheetUrl, updatedEntry);
-      }
-
-      await handleRefreshEntries();
-    } catch (e) {
-      console.error('Eroare la handleWakeUp:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   const handleDeleteEntry = async (itemId) => {
     const updated = await deleteEntryById(itemId, entries, sheetUrl);
@@ -520,17 +539,7 @@ export default function HomeScreen({ navigation }) {
 
   const handleOpenEditModal = (item) => {
     setCurrentEditingItem(item);
-    setEditedValue(item.value || '');
     setEditModalVisible(true);
-  };
-
-  const handleConfirmEdit = async () => {
-    if (!currentEditingItem) return;
-    const forcedOffline = await getForceOffline();
-    const updated = await updateEntryValue(currentEditingItem, editedValue, entries, forcedOffline ? null : sheetUrl);
-    setEntries([...updated]);
-    setEditModalVisible(false);
-    setCurrentEditingItem(null);
   };
 
   const toggleDayCollapse = (dateKey) => {
@@ -553,13 +562,14 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* HeaderBar actualizat cu butonul de toggle pentru statistici */}
       <HeaderBar
         babyName={babyName}
         navigation={navigation}
         currentTheme={currentTheme}
         showStats={showStats}
         onToggleStats={() => setShowStats(!showStats)}
+        showLastEventsBanner={showLastEventsBanner}                     // 💡 Transmitem starea bannerului către HeaderBar
+        onToggleLastEventsBanner={() => setShowLastEventsBanner(!showLastEventsBanner)} // 💡 Funcția de toggle de pe Header
       />
 
       {isOffline && (
@@ -569,9 +579,20 @@ export default function HomeScreen({ navigation }) {
       )}
 
       <View style={{ flex: 1 }}>
-        {/* Componenta de Grafice / Statistici plasată deasupra istoricului */}
         {showStats && (
           <StatsDashboard entries={allUniqueEntries} currentTheme={currentTheme} />
+        )}
+
+        {/* 💡 Afișăm LastEventsSummary sub header dacă este activat din toggle-ul de pe header */}
+        {showLastEventsBanner && (
+          <LastEventsSummary
+            entries={allUniqueEntries}
+            sortedDates={sortedDates}
+            groupedEntries={groupedEntries}
+            todayStr={todayStr}
+            cleanTime={cleanTime}
+            currentTheme={currentTheme}
+          />
         )}
 
         <HistorySection
@@ -587,8 +608,10 @@ export default function HomeScreen({ navigation }) {
           toggleDayCollapse={toggleDayCollapse}
           cleanTime={cleanTime}
           getGrowthDifferenceText={getGrowthDifferenceText}
-          handleOpenEditModal={handleOpenEditModal}
-          handleDeleteEntry={handleDeleteEntry}
+          onOpenActionModal={(item) => {
+            setSelectedItemForAction(item);
+            setActionModalVisible(true);
+          }}
           translateType={translateType}
           t={t}
         />
@@ -617,14 +640,60 @@ export default function HomeScreen({ navigation }) {
         />
       </View>
 
+      {/* Meniul stilizat de acțiuni la long-press */}
+      <ActionModal
+        visible={actionModalVisible}
+        currentTheme={currentTheme}
+        t={t}
+        onClose={() => setActionModalVisible(false)}
+        onEdit={() => {
+          if (selectedItemForAction) {
+            handleOpenEditModal(selectedItemForAction);
+          }
+        }}
+        onDelete={() => {
+          if (selectedItemForAction) {
+            handleDeleteEntry(selectedItemForAction.originalId || selectedItemForAction.id);
+          }
+        }}
+      />
+
+      {/* Modalul de Editare */}
       <EditEntryModal
         visible={editModalVisible}
         currentTheme={currentTheme}
         t={t}
-        editedValue={editedValue}
-        setEditedValue={setEditedValue}
-        onClose={() => setEditModalVisible(false)}
-        onConfirm={handleConfirmEdit}
+        entryItem={currentEditingItem}
+        onClose={() => {
+          setEditModalVisible(false);
+          setCurrentEditingItem(null);
+        }}
+        onSave={(updatedData) => {
+          setEditModalVisible(false);
+          setCurrentEditingItem(null);
+
+          const finalEntries = entries.map(e => {
+            const eId = String(e?.id || '').trim();
+            const targetId = String(currentEditingItem?.id || '').trim();
+            return eId === targetId ? { ...e, ...updatedData } : e;
+          });
+
+          setEntries([...finalEntries]);
+          saveLocalEntries(finalEntries);
+
+          getForceOffline().then(async (forcedOffline) => {
+            if (!forcedOffline) {
+              updateEntryValue(
+                currentEditingItem,
+                updatedData.value,
+                entries,
+                sheetUrl
+              ).catch((err) => {
+                console.log('Eroare sincronizare fundal editare:', err);
+              });
+            }
+          });
+        }}
       />
     </SafeAreaView>
   );

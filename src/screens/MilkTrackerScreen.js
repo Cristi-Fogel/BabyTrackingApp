@@ -87,6 +87,14 @@ export default function MilkTrackerScreen() {
     }
   };
 
+  // Funcție sigură pentru data locală (evită decalajul UTC pentru ora 01:24)
+  const getLocalDateString = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleSave = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -101,12 +109,12 @@ export default function MilkTrackerScreen() {
         ? `${milkSource} (Alăptare directă)`
         : `${amount || 0} ml (${milkSource})`;
 
-      // Salvăm totul cu type: 'milk' pentru procesare unitară
       const entryType = 'milk';
+      const localDateStr = getLocalDateString(date); // ✅ Folosim data locală corectă
 
       const newEntry = {
         id: now.getTime().toString(),
-        date: date.toISOString().split('T')[0],
+        date: localDateStr,
         time: timeString,
         type: entryType,
         value: formattedValue,
@@ -151,7 +159,7 @@ export default function MilkTrackerScreen() {
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
       <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Buton Înapoi la Bebe stilizat identic cu MamaScreen */}
+        {/* Buton Înapoi */}
         <TouchableOpacity
           style={[
             styles.backButtonLarge,
