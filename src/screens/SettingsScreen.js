@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -43,7 +43,7 @@ import Constants from 'expo-constants';
 export default function SettingsScreen({ navigation }) {
   const [sheetUrl, setSheetUrl] = useState('');
   const [babyName, setBabyName] = useState('');
-  const [dropsEnabled, setDropsEnabled] = useState(false);
+  const [dropsEnabled, setDropsEnabled] = useState(true); // 💡 Activă by default (true)
   const [forceOffline, setForceOffline] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentLang, setCurrentLang] = useState('ro');
@@ -54,22 +54,10 @@ export default function SettingsScreen({ navigation }) {
 
   const [loading, setLoading] = useState(false);
 
-  const [initialState, setInitialState] = useState({
-    sheetUrl: '',
-    babyName: '',
-    dropsEnabled: false,
-    forceOffline: false,
-    isDarkMode: false,
-    currentLang: 'ro',
-    fontSize: 'normal',
-    lastEventsDefault: true,
-    statsDefault: false,
-  });
-
   const t = translations[currentLang] || translations.ro;
 
   useFocusEffect(
-    useCallback(() => {
+    React.useCallback(() => {
       let isMounted = true;
       const loadSettings = async () => {
         try {
@@ -84,37 +72,15 @@ export default function SettingsScreen({ navigation }) {
           const statsDef = await getStatsDefault();
 
           if (isMounted) {
-            const urlVal = url || '';
-            const nameVal = name || '';
-            const dropsVal = !!drops;
-            const offlineVal = !!offline;
-            const darkVal = themeMode === 'dark';
-            const langVal = lang || 'ro';
-            const fSizeVal = fSize || 'normal';
-            const lEventsVal = lEventsDef !== null ? lEventsDef : true;
-            const statsVal = statsDef !== null ? statsDef : false;
-
-            setSheetUrl(urlVal);
-            setBabyName(nameVal);
-            setDropsEnabled(dropsVal);
-            setForceOffline(offlineVal);
-            setIsDarkMode(darkVal);
-            setCurrentLang(langVal);
-            setFontSize(fSizeVal);
-            setLastEventsDefault(lEventsVal);
-            setStatsDefault(statsVal);
-
-            setInitialState({
-              sheetUrl: urlVal,
-              babyName: nameVal,
-              dropsEnabled: dropsVal,
-              forceOffline: offlineVal,
-              isDarkMode: darkVal,
-              currentLang: langVal,
-              fontSize: fSizeVal,
-              lastEventsDefault: lEventsVal,
-              statsDefault: statsVal,
-            });
+            setSheetUrl(url || '');
+            setBabyName(name || '');
+            setDropsEnabled(drops !== null ? !!drops : true); // 💡 Fallback la true dacă nu e salvat nimic
+            setForceOffline(!!offline);
+            setIsDarkMode(themeMode === 'dark');
+            setCurrentLang(lang || 'ro');
+            setFontSize(fSize || 'normal');
+            setLastEventsDefault(lEventsDef !== null ? lEventsDef : true);
+            setStatsDefault(statsDef !== null ? statsDef : false);
           }
         } catch (e) {
           console.error(e);
@@ -129,42 +95,6 @@ export default function SettingsScreen({ navigation }) {
     }, [])
   );
 
-  const hasChanges =
-    sheetUrl !== initialState.sheetUrl ||
-    babyName !== initialState.babyName ||
-    dropsEnabled !== initialState.dropsEnabled ||
-    forceOffline !== initialState.forceOffline ||
-    isDarkMode !== initialState.isDarkMode ||
-    currentLang !== initialState.currentLang ||
-    fontSize !== initialState.fontSize ||
-    lastEventsDefault !== initialState.lastEventsDefault ||
-    statsDefault !== initialState.statsDefault;
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (!hasChanges) {
-        return;
-      }
-
-      e.preventDefault();
-
-      Alert.alert(
-        'Modificări nesalvate',
-        'Ai modificări care nu au fost salvate. Dorești să ieși fără să salvezi?',
-        [
-          { text: 'Rămâi', style: 'cancel', onPress: () => {} },
-          {
-            text: 'Ieși',
-            style: 'destructive',
-            onPress: () => navigation.dispatch(e.data.action),
-          },
-        ]
-      );
-    });
-
-    return unsubscribe;
-  }, [navigation, hasChanges, sheetUrl, babyName, dropsEnabled, forceOffline, isDarkMode, currentLang, fontSize, lastEventsDefault, statsDefault]);
-
   const handleSaveAll = async () => {
     setLoading(true);
     try {
@@ -177,18 +107,6 @@ export default function SettingsScreen({ navigation }) {
       await saveFontSize(fontSize);
       await saveLastEventsDefault(lastEventsDefault);
       await saveStatsDefault(statsDefault);
-
-      setInitialState({
-        sheetUrl: sheetUrl.trim(),
-        babyName: babyName.trim(),
-        dropsEnabled,
-        forceOffline,
-        isDarkMode,
-        currentLang,
-        fontSize,
-        lastEventsDefault,
-        statsDefault,
-      });
 
       Alert.alert('Succes', 'Setările au fost salvate cu succes!');
     } catch (e) {
@@ -225,7 +143,7 @@ export default function SettingsScreen({ navigation }) {
       {/* 📜 Conținut Scrollabil */}
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
-        {/* Limbă (Etichetă și butoane pe același rând) */}
+        {/* Limbă */}
         <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
           <View style={styles.settingRow}>
             <Text style={[styles.labelInline, { color: currentTheme.textMain }]}>
@@ -365,11 +283,8 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
 
-      </ScrollView>
-
-      {/* 📌 Buton Salvare Fix (cu marginTop: 5 și marginBottom: 20) */}
-      <View style={[styles.fixedFooter, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAll} disabled={loading}>
+        {/* 🚀 Buton de Salvare */}
+        <TouchableOpacity style={styles.saveBtnInScroll} onPress={handleSaveAll} disabled={loading}>
           {loading ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
@@ -379,7 +294,8 @@ export default function SettingsScreen({ navigation }) {
             </>
           )}
         </TouchableOpacity>
-      </View>
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -397,14 +313,8 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
   },
-  fixedFooter: {
-    paddingTop: 5,         // 💡 Top margin / padding 5px
-    paddingBottom: 0,
-    borderTopWidth: 1,
-    marginBottom: 20,      // 💡 Bottom margin 20px (evită suprapunerea pe Android)
-  },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 40,
   },
   card: {
     padding: 12,
@@ -423,8 +333,19 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingText: { fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },
   langBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginHorizontal: 3 },
-  langBtnCompact: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginLeft: 4, minWidth: 42 },
+  // 💡 Lățime mărită pentru butoanele de limbă (minWidth și padding orizontal mai mare)
+  langBtnCompact: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginLeft: 6, minWidth: 55 },
   langText: { fontSize: 11, fontWeight: 'bold' },
-  saveBtn: { flexDirection: 'row', backgroundColor: '#27AE60', paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  saveBtnInScroll: {
+    flexDirection: 'row',
+    backgroundColor: '#27AE60',
+    paddingVertical: 14,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+    elevation: 3,
+  },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
 });
