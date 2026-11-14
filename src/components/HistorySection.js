@@ -47,7 +47,6 @@ export default function HistorySection({
     } else if (fontSizeSetting === 'extraLarge') {
       return { title: 18, sub: 15, value: 19, header: 16, stat: 13 };
     }
-    // Normal (default)
     return { title: 11, sub: 10, value: 12, header: 12, stat: 10 };
   };
 
@@ -129,7 +128,6 @@ export default function HistorySection({
     const totalSleepMinutes = ((24 * 60) - startMin) + endMin;
     const totalDurationText = formatDuration(totalSleepMinutes);
 
-    // Prima parte (ziua precedenta): Fără durată și marcată corect să nu apară ca activă
     const part1 = {
       ...item,
       id: `${item.id}_part1`,
@@ -139,7 +137,6 @@ export default function HistorySection({
       customDurationLabel: '',
     };
 
-    // A doua parte (ziua următoare): Afișează durata totală la trezire
     const part2 = {
       ...item,
       id: `${item.id}_part2`,
@@ -156,7 +153,6 @@ export default function HistorySection({
   const renderSleepDetails = (value, item) => {
     if (!value) return <Text style={[styles.historyValue, { color: currentTheme.tint, fontSize: dynamicFont.value }]}>-</Text>;
 
-    // Verificăm dacă este somn în desfășurare real (doar dacă e activ și nu face parte dintr-un split completat)
     const isSleepingNow =
       value.toLowerCase().includes('adormit la') &&
       !value.toLowerCase().includes('trezit la') &&
@@ -164,9 +160,8 @@ export default function HistorySection({
 
     if (isSleepingNow) {
       return (
-        <View style={[styles.sleepDetailsContainer, { flexDirection: 'row', alignItems: 'center' }]}>
-          <ZZZAnimation style={{ marginRight: 4 }} textStyle={{ color: '#2980B9', fontSize: dynamicFont.sub }} />
-          <Text style={[styles.sleepDetailTextActive, { color: '#2980B9', fontSize: dynamicFont.sub }]}>Doarme încă...</Text>
+        <View style={styles.sleepDetailsContainer}>
+          <Text style={[styles.sleepDetailTextActive, { color: '#2980B9', fontSize: dynamicFont.sub }]}>Doarme în curs...</Text>
         </View>
       );
     }
@@ -218,7 +213,7 @@ export default function HistorySection({
     return <Ionicons name="moon-outline" size={18} color="#2980B9" style={{ marginRight: 8 }} />;
   };
 
-  const calculateDayStats = (entries) => {
+  const calculateDayStats = (entries, dateStr, todayStr) => {
     let totalMilk = 0;
     let totalSleepMinutes = 0;
 
@@ -230,7 +225,6 @@ export default function HistorySection({
       const type = String(item?.type || '').toLowerCase();
       const val = String(item?.value || '');
 
-      // 1. Calcul lapte
       if (type === 'milk' || type === 'lapte' || type === 'alaptare' || val.toLowerCase().includes('sân')) {
         const mlMatch = val.match(/(\d+)\s*ml/i);
         if (mlMatch) {
@@ -238,7 +232,6 @@ export default function HistorySection({
         }
       }
 
-      // 2. Calcul somn: adunăm doar de pe rândurile care au durată calculată
       if (type === 'sleep') {
         const durationSource = item.customDurationLabel || '';
         const hMatch = durationSource.match(/(\d+)\s*h/i);
@@ -248,7 +241,7 @@ export default function HistorySection({
           const hours = hMatch ? parseInt(hMatch[1], 10) : 0;
           const mins = mMatch ? parseInt(mMatch[1], 10) : 0;
           totalSleepMinutes += (hours * 60) + mins;
-        } else if (!item.displayPart || item.displayPart === 'full') {
+        } else if (!item.displayPart || item.displayPart === 'full' || item.displayPart === 'second') {
           const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s]+?)(?=\s*-|\s*Trezit|$)/i);
           const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
 
@@ -265,10 +258,24 @@ export default function HistorySection({
     });
 
     const sleepHoursNum = totalSleepMinutes / 60;
-    const clampedSleepHours = Math.min(24.0, sleepHoursNum);
-    const sleepHours = clampedSleepHours.toFixed(1);
+    const isToday = (dateStr === 'Astăzi' || dateStr === todayStr);
 
-    const awakeHoursNum = Math.max(0.0, 24.0 - clampedSleepHours);
+    let awakeHoursNum = 0;
+    let effectiveSleepHoursNum = sleepHoursNum;
+
+    if (isToday) {
+      const now = new Date();
+      const currentDayMinutes = now.getHours() * 60 + now.getMinutes();
+      const elapsedHoursNum = currentDayMinutes / 60;
+
+      effectiveSleepHoursNum = Math.min(sleepHoursNum, elapsedHoursNum);
+      awakeHoursNum = Math.max(0, elapsedHoursNum - effectiveSleepHoursNum);
+    } else {
+      effectiveSleepHoursNum = Math.min(24.0, sleepHoursNum);
+      awakeHoursNum = Math.max(0.0, 24.0 - effectiveSleepHoursNum);
+    }
+
+    const sleepHours = effectiveSleepHoursNum.toFixed(1);
     const awakeHours = awakeHoursNum.toFixed(1);
 
     return { totalMilk, sleepHours, awakeHours };
@@ -422,7 +429,7 @@ export default function HistorySection({
             const autoCollapsed = isOlderThan7Days(dateStr);
             const isCollapsed = isGrowthFilter ? false : (collapsedDays[dateStr] !== undefined ? collapsedDays[dateStr] : autoCollapsed);
 
-            const stats = calculateDayStats(dayEntries);
+            const stats = calculateDayStats(dayEntries, dateStr, todayStr);
 
             return (
               <View key={dateStr} style={styles.dayGroupContainer}>
@@ -459,6 +466,8 @@ export default function HistorySection({
                     const sleepDurationLabel = isSleep
                       ? (item.customDurationLabel || getSleepDurationText(item?.value))
                       : '';
+
+                    const isSleepingNow = isSleep && String(item?.value || '').toLowerCase().includes('adormit la') && !String(item?.value || '').toLowerCase().includes('trezit la');
 
                     return (
                       <TouchableOpacity
@@ -531,5 +540,5 @@ const styles = StyleSheet.create({
   sleepDetailRow: { flexDirection: 'row', alignItems: 'center' },
   sleepDetailTextSleep: { fontWeight: 'bold' },
   sleepDetailTextWake: { fontWeight: 'bold' },
-  sleepDetailTextActive: { fontWeight: 'bold' },
+  sleepDetailTextActive: { fontWeight: 'bold', fontStyle: 'italic' },
 });

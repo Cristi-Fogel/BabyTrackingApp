@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
-import ZZZAnimation from './ZZZAnimation';
 import {
   getLocalEntries,
   saveLocalEntries,
@@ -55,7 +54,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
       }
 
       if (onEntryAdded) {
-        onEntryAdded();
+        onEntryAdded(newEntry);
       }
     } catch (e) {
       console.error('Eroare la adăugarea rapidă a somnului:', e);
@@ -125,7 +124,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
                 <ActivityIndicator size="small" color="#FFF" />
               ) : activeSleepEntry ? (
                 <View style={styles.sleepActiveContainer}>
-                  <ZZZAnimation textStyle={{ color: '#FFF', fontSize: 13 }} />
+                  <Ionicons name="moon" size={18} color="#FFF" />
                   <Text style={[styles.menuText, { marginLeft: 4 }]}>Doarme</Text>
                 </View>
               ) : (
@@ -208,7 +207,7 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
               <Text style={styles.menuText}>Remindere</Text>
             </TouchableOpacity>
 
-            {/* Buton Alarme (Navigare Standard) */}
+            {/* Buton Alarme */}
             <TouchableOpacity
               style={[styles.menuCard, { backgroundColor: '#C0392B', opacity: loadingCard && loadingCard !== 'alarms' ? 0.6 : 1 }]}
               onPress={() => handleNavigationPress('alarms', 'Alarms')}
