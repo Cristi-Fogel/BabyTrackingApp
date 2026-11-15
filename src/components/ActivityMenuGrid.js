@@ -75,10 +75,6 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
 
   return (
     <View style={{ marginBottom: 2 }}>
-      <Text style={[styles.sectionHeader, { color: currentTheme.textSub }]}>
-        {t.menuHeader || 'Meniu Activități'}
-      </Text>
-
       <ScrollView
         horizontal
         pagingEnabled
@@ -174,29 +170,45 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
         {/* Pagina 2 */}
         <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#8E44AD' }]} onPress={() => Alert.alert('În curând', 'Modulul Scutec va fi disponibil în curând.')}>
+            {/* Buton Vaccinuri */}
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#16A085', opacity: loadingCard && loadingCard !== 'vaccines' ? 0.6 : 1 }]}
+              onPress={() => handleNavigationPress('vaccines', 'Vaccines')}
+              disabled={loadingCard !== null}
+            >
+              {loadingCard === 'vaccines' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="medical-outline" size={20} color="#FFF" />
+                  <Text style={styles.menuText}>Vaccinuri & Tratamente</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Buton Scutec */}
+            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#8E44AC' }]} onPress={() => Alert.alert('În curând', 'Modulul Scutec va fi disponibil în curând.')}>
               <MaterialCommunityIcons name="baby-face-outline" size={20} color="#FFF" />
               <Text style={styles.menuText}>Scutec</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#16A085' }]} onPress={() => Alert.alert('În curând', 'Modulul Achiziții va fi disponibil în curând.')}>
-              <Ionicons name="cart-outline" size={20} color="#FFF" />
-              <Text style={styles.menuText}>Achiziții</Text>
             </TouchableOpacity>
           </View>
 
           <View style={[styles.menuRow, { marginTop: 6 }]}>
+            {/* Buton Achiziții (cu nuanță nouă de mov/violet închis: #9b59b6) */}
+            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#3F51B5' }]} onPress={() => Alert.alert('În curând', 'Modulul Achiziții va fi disponibil în curând.')}>
+              <Ionicons name="cart-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Achiziții</Text>
+            </TouchableOpacity>
+
+            {/* Buton Note */}
             <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#D35400' }]} onPress={() => Alert.alert('În curând', 'Modulul Note va fi disponibil în curând.')}>
               <Ionicons name="book-outline" size={20} color="#FFF" />
               <Text style={styles.menuText}>Note</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#7F8C8D' }]} onPress={() => Alert.alert('În curând', 'Modulul Custom va fi disponibil în curând.')}>
-              <Ionicons name="add-circle-outline" size={20} color="#FFF" />
-              <Text style={styles.menuText}>Custom</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Pagina 3 */}
+        {/* Pagina 3 (Remindere, Alarme, Sleep Detaliat, Custom mutat aici) */}
         <View style={[styles.menuPageGrid, { width: pageWidth }]}>
           <View style={styles.menuRow}>
             <TouchableOpacity
@@ -240,7 +252,11 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
               )}
             </TouchableOpacity>
 
-            <View style={[styles.menuCard, { backgroundColor: 'transparent', borderWidth: 0, elevation: 0, flex: 1, marginHorizontal: 3 }]} />
+            {/* Buton Custom mutat pe pagina 3 */}
+            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#7F8C8D', flex: 1, marginHorizontal: 3 }]} onPress={() => Alert.alert('În curând', 'Modulul Custom va fi disponibil în curând.')}>
+              <Ionicons name="add-circle-outline" size={20} color="#FFF" />
+              <Text style={styles.menuText}>Custom</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -255,12 +271,11 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
 }
 
 const styles = StyleSheet.create({
-  sectionHeader: { fontSize: 12, fontWeight: 'bold', marginVertical: 2, marginLeft: 2 },
-  menuSwipeContainer: { flexGrow: 0, marginBottom: 2 },
+  menuSwipeContainer: { marginTop: 2, flexGrow: 0, marginBottom: 2 },
   menuSwipeContentContainer: { alignItems: 'center' },
   menuPageGrid: { marginHorizontal: 0 },
   menuRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  menuCard: { flex: 1, marginHorizontal: 3, height: 62, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1, flexDirection: 'row' },
+  menuCard: { flex: 1, marginHorizontal: 3, height: 54, borderRadius: 10, alignItems: 'center', justifyContent: 'center', elevation: 1, flexDirection: 'row' },
   menuText: { color: '#FFF', fontWeight: 'bold', marginLeft: 6, fontSize: 11 },
   sleepActiveContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   paginationDotsContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: 8, marginBottom: 2 },

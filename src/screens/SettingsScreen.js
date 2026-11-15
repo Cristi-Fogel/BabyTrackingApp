@@ -12,6 +12,7 @@ import {
   StatusBar,
   Switch,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -43,7 +44,7 @@ import Constants from 'expo-constants';
 export default function SettingsScreen({ navigation }) {
   const [sheetUrl, setSheetUrl] = useState('');
   const [babyName, setBabyName] = useState('');
-  const [dropsEnabled, setDropsEnabled] = useState(true); // 💡 Activă by default (true)
+  const [dropsEnabled, setDropsEnabled] = useState(true);
   const [forceOffline, setForceOffline] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentLang, setCurrentLang] = useState('ro');
@@ -74,7 +75,7 @@ export default function SettingsScreen({ navigation }) {
           if (isMounted) {
             setSheetUrl(url || '');
             setBabyName(name || '');
-            setDropsEnabled(drops !== null ? !!drops : true); // 💡 Fallback la true dacă nu e salvat nimic
+            setDropsEnabled(drops !== null ? !!drops : true);
             setForceOffline(!!offline);
             setIsDarkMode(themeMode === 'dark');
             setCurrentLang(lang || 'ro');
@@ -107,8 +108,6 @@ export default function SettingsScreen({ navigation }) {
       await saveFontSize(fontSize);
       await saveLastEventsDefault(lastEventsDefault);
       await saveStatsDefault(statsDefault);
-
-      Alert.alert('Succes', 'Setările au fost salvate cu succes!');
     } catch (e) {
       Alert.alert('Eroare', 'Nu s-au putut salva setările.');
     } finally {
@@ -123,179 +122,192 @@ export default function SettingsScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* 📌 Header Fix */}
-      <View style={[styles.fixedHeader, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-        <View style={styles.rowBetween}>
-          <View>
-            <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>
-              {t.settingsTitle || 'Setări'}
-            </Text>
-            <Text style={[styles.versionSubText, { color: currentTheme.textSub }]}>
-              Versiune v{appVersion}
-            </Text>
+      {/* 🛡️ KeyboardAvoidingView împinge conținutul în sus când apare tastatura */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        {/* 📌 1. HEADER FIX SUS */}
+        <View style={[styles.fixedHeader, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+          <View style={styles.rowBetween}>
+            <View>
+              <Text style={[styles.cardTitle, { color: currentTheme.textMain }]}>
+                {t.settingsTitle || 'Setări'}
+              </Text>
+              <Text style={[styles.versionSubText, { color: currentTheme.textSub }]}>
+                Versiune v{appVersion}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+              <Ionicons name="close" size={24} color={currentTheme.textSub} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color={currentTheme.textSub} />
-          </TouchableOpacity>
         </View>
-      </View>
 
-      {/* 📜 Conținut Scrollabil */}
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* 📜 2. CONȚINUT SCROLLABIL LA MIJLOC */}
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Limbă */}
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <View style={styles.settingRow}>
+              <Text style={[styles.labelInline, { color: currentTheme.textMain }]}>
+                {currentLang === 'ro' ? 'Limbă' : currentLang === 'en' ? 'Language' : 'Nyelv'}
+              </Text>
+              <View style={[styles.row, { flex: 1, justifyContent: 'flex-end', marginLeft: 12 }]}>
+                {['ro', 'en', 'hu'].map((code) => (
+                  <TouchableOpacity
+                    key={code}
+                    style={[
+                      styles.langBtnCompact,
+                      { borderColor: currentTheme.border, backgroundColor: currentTheme.inputBackground },
+                      currentLang === code && { backgroundColor: '#D35400', borderColor: '#D35400' },
+                    ]}
+                    onPress={() => setCurrentLang(code)}
+                  >
+                    <Text
+                      style={[
+                        styles.langText,
+                        { color: currentLang === code ? '#FFF' : currentTheme.textMain },
+                      ]}
+                    >
+                      {code.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
 
-        {/* Limbă */}
-        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-          <View style={styles.settingRow}>
-            <Text style={[styles.labelInline, { color: currentTheme.textMain }]}>
-              {currentLang === 'ro' ? 'Limbă' : currentLang === 'en' ? 'Language' : 'Nyelv'}
+          {/* Font Listă */}
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>
+              Dimensiune Font Listă 🔠
             </Text>
-            <View style={[styles.row, { flex: 1, justifyContent: 'flex-end', marginLeft: 12 }]}>
-              {['ro', 'en', 'hu'].map((code) => (
+            <View style={[styles.row, { marginTop: 8 }]}>
+              {[
+                { key: 'small', label: 'Mic' },
+                { key: 'normal', label: 'Normal' },
+                { key: 'large', label: 'Mare' },
+                { key: 'extraLarge', label: 'Extra Mare' },
+              ].map((item) => (
                 <TouchableOpacity
-                  key={code}
+                  key={item.key}
                   style={[
-                    styles.langBtnCompact,
+                    styles.langBtn,
                     { borderColor: currentTheme.border, backgroundColor: currentTheme.inputBackground },
-                    currentLang === code && { backgroundColor: '#D35400', borderColor: '#D35400' },
+                    fontSize === item.key && { backgroundColor: '#2980B9', borderColor: '#2980B9' },
                   ]}
-                  onPress={() => setCurrentLang(code)}
+                  onPress={() => setFontSize(item.key)}
                 >
                   <Text
                     style={[
                       styles.langText,
-                      { color: currentLang === code ? '#FFF' : currentTheme.textMain },
+                      { color: fontSize === item.key ? '#FFF' : currentTheme.textMain },
                     ]}
                   >
-                    {code.toUpperCase()}
+                    {item.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-        </View>
 
-        {/* Font Listă */}
-        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-          <Text style={[styles.label, { color: currentTheme.textMain }]}>
-            Dimensiune Font Listă 🔠
-          </Text>
-          <View style={[styles.row, { marginTop: 8 }]}>
-            {[
-              { key: 'small', label: 'Mic' },
-              { key: 'normal', label: 'Normal' },
-              { key: 'large', label: 'Mare' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[
-                  styles.langBtn,
-                  { borderColor: currentTheme.border, backgroundColor: currentTheme.inputBackground },
-                  fontSize === item.key && { backgroundColor: '#2980B9', borderColor: '#2980B9' },
-                ]}
-                onPress={() => setFontSize(item.key)}
-              >
-                <Text
-                  style={[
-                    styles.langText,
-                    { color: fontSize === item.key ? '#FFF' : currentTheme.textMain },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Stare implicită */}
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <Text style={[styles.label, { color: currentTheme.textMain, marginBottom: 10 }]}>
+              Stare implicită la pornire aplicație ⚙️
+            </Text>
+            <View style={styles.settingRow}>
+              <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Afișează rezumatul (Last Events) ⏱️</Text>
+              <Switch
+                value={lastEventsDefault}
+                onValueChange={setLastEventsDefault}
+                trackColor={{ false: '#767577', true: '#D35400' }}
+              />
+            </View>
+
+            <View style={[styles.settingRow, { marginTop: 12 }]}>
+              <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Afișează statisticile (Stats Dashboard) 📊</Text>
+              <Switch
+                value={statsDefault}
+                onValueChange={setStatsDefault}
+                trackColor={{ false: '#767577', true: '#2980B9' }}
+              />
+            </View>
           </View>
-        </View>
 
-        {/* Stare implicită */}
-        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-          <Text style={[styles.label, { color: currentTheme.textMain, marginBottom: 10 }]}>
-            Stare implicită la pornire aplicație ⚙️
-          </Text>
-          <View style={styles.settingRow}>
-            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Afișează rezumatul (Last Events) ⏱️</Text>
-            <Switch
-              value={lastEventsDefault}
-              onValueChange={setLastEventsDefault}
-              trackColor={{ false: '#767577', true: '#D35400' }}
+          {/* Nume & Sheet URL */}
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <Text style={[styles.label, { color: currentTheme.textMain }]}>Nume Bebeluș:</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+              value={babyName}
+              onChangeText={setBabyName}
+              placeholder="Introduceți numele bebelușului..."
+              placeholderTextColor={currentTheme.inputPlaceholder}
+            />
+
+            <Text style={[styles.label, { color: currentTheme.textMain, marginTop: 12 }]}>Google Sheet WebApp URL:</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
+              value={sheetUrl}
+              onChangeText={setSheetUrl}
+              placeholder="https://script.google.com/..."
+              placeholderTextColor={currentTheme.inputPlaceholder}
+              autoCapitalize="none"
             />
           </View>
 
-          <View style={[styles.settingRow, { marginTop: 12 }]}>
-            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Afișează statisticile (Stats Dashboard) 📊</Text>
-            <Switch
-              value={statsDefault}
-              onValueChange={setStatsDefault}
-              trackColor={{ false: '#767577', true: '#2980B9' }}
-            />
+          {/* Toggle-uri principale */}
+          <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <View style={styles.settingRow}>
+              <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Activează notificarea picături zilnice 💧</Text>
+              <Switch
+                value={dropsEnabled}
+                onValueChange={setDropsEnabled}
+                trackColor={{ false: '#767577', true: '#27AE60' }}
+              />
+            </View>
+
+            <View style={[styles.settingRow, { marginTop: 12 }]}>
+              <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Forțează modul Offline 📴</Text>
+              <Switch
+                value={forceOffline}
+                onValueChange={setForceOffline}
+                trackColor={{ false: '#767577', true: '#E67E22' }}
+              />
+            </View>
+
+            <View style={[styles.settingRow, { marginTop: 12 }]}>
+              <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Mod Întunecat (Dark Theme) 🌙</Text>
+              <Switch
+                value={isDarkMode}
+                onValueChange={setIsDarkMode}
+                trackColor={{ false: '#767577', true: '#2980B9' }}
+              />
+            </View>
           </View>
+        </ScrollView>
+
+        {/* 🚀 3. FOOTER FIX JOS */}
+        <View style={[styles.fixedFooter, { backgroundColor: currentTheme.background }]}>
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAll} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 6 }} />
+                <Text style={styles.saveBtnText}>Salvează Setările</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
-
-        {/* Nume & Sheet URL */}
-        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-          <Text style={[styles.label, { color: currentTheme.textMain }]}>Nume Bebeluș:</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-            value={babyName}
-            onChangeText={setBabyName}
-            placeholder="Introduceți numele bebelușului..."
-            placeholderTextColor={currentTheme.inputPlaceholder}
-          />
-
-          <Text style={[styles.label, { color: currentTheme.textMain, marginTop: 12 }]}>Google Sheet WebApp URL:</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: currentTheme.inputBackground, color: currentTheme.inputText, borderColor: currentTheme.border }]}
-            value={sheetUrl}
-            onChangeText={setSheetUrl}
-            placeholder="https://script.google.com/..."
-            placeholderTextColor={currentTheme.inputPlaceholder}
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* Toggle-uri principale */}
-        <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-          <View style={styles.settingRow}>
-            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Activează notificarea picături zilnice 💧</Text>
-            <Switch
-              value={dropsEnabled}
-              onValueChange={setDropsEnabled}
-              trackColor={{ false: '#767577', true: '#27AE60' }}
-            />
-          </View>
-
-          <View style={[styles.settingRow, { marginTop: 12 }]}>
-            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Forțează modul Offline 📴</Text>
-            <Switch
-              value={forceOffline}
-              onValueChange={setForceOffline}
-              trackColor={{ false: '#767577', true: '#E67E22' }}
-            />
-          </View>
-
-          <View style={[styles.settingRow, { marginTop: 12 }]}>
-            <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Mod Întunecat (Dark Theme) 🌙</Text>
-            <Switch
-              value={isDarkMode}
-              onValueChange={setIsDarkMode}
-              trackColor={{ false: '#767577', true: '#2980B9' }}
-            />
-          </View>
-        </View>
-
-        {/* 🚀 Buton de Salvare */}
-        <TouchableOpacity style={styles.saveBtnInScroll} onPress={handleSaveAll} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator size="small" color="#FFF" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 6 }} />
-              <Text style={styles.saveBtnText}>Salvează Setările</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -309,12 +321,19 @@ const styles = StyleSheet.create({
   fixedHeader: {
     padding: 12,
     borderRadius: 10,
-    marginBottom: 10,
+    marginBottom: 8,
     elevation: 2,
     borderWidth: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 10,
+  },
+  fixedFooter: {
+    paddingTop: 6,
+    paddingBottom: 25,
   },
   card: {
     padding: 12,
@@ -333,19 +352,16 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingText: { fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },
   langBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginHorizontal: 3 },
-  // 💡 Lățime mărită pentru butoanele de limbă (minWidth și padding orizontal mai mare)
   langBtnCompact: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginLeft: 6, minWidth: 55 },
   langText: { fontSize: 11, fontWeight: 'bold' },
-  saveBtnInScroll: {
+  saveBtn: {
     flexDirection: 'row',
     backgroundColor: '#27AE60',
     paddingVertical: 14,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
-    elevation: 3,
+    elevation: 4,
   },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
 });
