@@ -58,6 +58,8 @@ export default function LastEventsSummary({
     }
 
     let checkedFirstSleep = false;
+    let foundMilk = false;
+    let foundSleep = false;
 
     for (const dateStr of sortedDates) {
       const dayEntries = groupedEntries[dateStr] || [];
@@ -68,12 +70,15 @@ export default function LastEventsSummary({
         const isBreastFeeding = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
         const isMilk = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeeding;
 
-        if (!lastMilkElapsed && isMilk) {
+        // Caută prima masă
+        if (!foundMilk && isMilk) {
           const eventDate = parseEntryDateTime(dateStr === todayStr ? todayStr : dateStr, item.time);
           lastMilkElapsed = getTimeElapsedText(eventDate);
+          foundMilk = true;
         }
 
-        if (!lastSleepElapsed && type === 'sleep') {
+        // Caută primul somn
+        if (!foundSleep && type === 'sleep') {
           if (!checkedFirstSleep) {
             checkedFirstSleep = true;
             const isSleepingNow = val.includes('adormit la') && !val.includes('trezit la');
@@ -82,15 +87,22 @@ export default function LastEventsSummary({
             }
           }
 
-          if (!isCurrentlySleeping) {
-            const eventDate = parseEntryDateTime(dateStr === todayStr ? todayStr : dateStr, item.time);
+          const isSleepingNowItem = val.includes('adormit la') && !val.includes('trezit la');
+
+          if (!isSleepingNowItem) {
+            const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
+            const timeToUse = wakeMatch ? wakeMatch[1].trim() : item.time;
+            const eventDate = parseEntryDateTime(dateStr === todayStr ? todayStr : dateStr, timeToUse);
             lastSleepElapsed = getTimeElapsedText(eventDate);
+            foundSleep = true;
+          } else if (!foundSleep && checkedFirstSleep && sortedDates.indexOf(dateStr) === sortedDates.length - 1 && dayEntries.indexOf(item) === dayEntries.length - 1) {
+            foundSleep = true;
           }
         }
 
-        if (lastMilkElapsed && (lastSleepElapsed || isCurrentlySleeping)) break;
+        if (foundMilk && foundSleep) break;
       }
-      if (lastMilkElapsed && (lastSleepElapsed || isCurrentlySleeping)) break;
+      if (foundMilk && foundSleep) break;
     }
 
     return { lastMilkElapsed, lastSleepElapsed, isCurrentlySleeping };
@@ -117,18 +129,21 @@ export default function LastEventsSummary({
       <View style={styles.statusItem}>
         <View style={styles.headerRow}>
           <Ionicons name="moon" size={13} color="#2980B9" style={{ marginRight: 4 }} />
-          <Text style={[styles.statusLabel, { color: currentTheme.textSub }]}>Timp de la somn</Text>
+          <Text style={[styles.statusLabel, { color: currentTheme.textSub }]}>
+            {isCurrentlySleeping ? 'Stare somn' : 'Timp de la somn'}
+          </Text>
         </View>
 
-        {isCurrentlySleeping ? (
-          <Text style={[styles.statusValue, { color: currentTheme.textMain }]} numberOfLines={1}>
-            Doarme
-          </Text>
-        ) : (
-          <Text style={[styles.statusValue, { color: currentTheme.textMain }]} numberOfLines={1}>
-            {lastSleepElapsed || 'Niciunul'}
-          </Text>
-        )}
+        <Text
+          style={[
+            styles.statusValue,
+            { color: currentTheme.textMain }, // 💡 Culoare standard (alb / text principal), fără albastru
+            isCurrentlySleeping && { fontSize: 11,   }
+          ]}
+          numberOfLines={1}
+        >
+          {isCurrentlySleeping ? 'Doarme' : (lastSleepElapsed || 'Niciunul')}
+        </Text>
       </View>
     </View>
   );

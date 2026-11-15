@@ -268,7 +268,7 @@ export default function HistorySection({
       const currentDayMinutes = now.getHours() * 60 + now.getMinutes();
       const elapsedHoursNum = currentDayMinutes / 60;
 
-      effectiveSleepHoursNum = Math.min(sleepHoursNum, elapsedHoursNum);
+      effectiveSleepHoursNum = Math.min(sleepHoursNum, Math.max(0, elapsedHoursNum));
       awakeHoursNum = Math.max(0, elapsedHoursNum - effectiveSleepHoursNum);
     } else {
       effectiveSleepHoursNum = Math.min(24.0, sleepHoursNum);
