@@ -11,6 +11,9 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { Slider } from '@miblanchard/react-native-slider';
@@ -87,7 +90,7 @@ export default function MilkTrackerScreen() {
     }
   };
 
-  // Funcție sigură pentru data locală (evită decalajul UTC pentru ora 01:24)
+  // Funcție sigură pentru data locală (evită decalajul UTC)
   const getLocalDateString = (d) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -110,7 +113,7 @@ export default function MilkTrackerScreen() {
         : `${amount || 0} ml (${milkSource})`;
 
       const entryType = 'milk';
-      const localDateStr = getLocalDateString(date); // ✅ Folosim data locală corectă
+      const localDateStr = getLocalDateString(date);
 
       const newEntry = {
         id: now.getTime().toString(),
@@ -157,188 +160,199 @@ export default function MilkTrackerScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
-      <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Buton Înapoi */}
-        <TouchableOpacity
-          style={[
-            styles.backButtonLarge,
-            {
-              backgroundColor: currentTheme.cardBackground,
-              borderColor: currentTheme.border,
-            },
-          ]}
-          onPress={handleBack}
-          disabled={isSubmitting}
-        >
-          <Ionicons name="arrow-back-outline" size={20} color={currentTheme.textMain} style={{ marginRight: 8 }} />
-          <Text style={[styles.backButtonLargeText, { color: currentTheme.textMain }]}>
-            Înapoi
-          </Text>
-        </TouchableOpacity>
+      {/* KeyboardAvoidingView mută tot conținutul în sus când apare tastatura */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
-        {/* 1. Selector Dată & Oră + Titlu */}
-        <View style={styles.topCompactRow}>
-          <View style={styles.dateTimeBoxesContainer}>
+            {/* Buton Înapoi */}
             <TouchableOpacity
-              style={[styles.dateTimeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-              onPress={() => openPicker('date')}
+              style={[
+                styles.backButtonLarge,
+                {
+                  backgroundColor: currentTheme.cardBackground,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+              onPress={handleBack}
+              disabled={isSubmitting}
             >
-              <Ionicons name="calendar-outline" size={16} color={currentTheme.textSub} style={{ marginRight: 4 }} />
-              <Text style={[styles.dateTimeText, { color: currentTheme.inputText }]}>
-                {date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              <Ionicons name="arrow-back-outline" size={20} color={currentTheme.textMain} style={{ marginRight: 8 }} />
+              <Text style={[styles.backButtonLargeText, { color: currentTheme.textMain }]}>
+                Înapoi
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.dateTimeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-              onPress={() => openPicker('time')}
-            >
-              <Ionicons name="time-outline" size={16} color={currentTheme.textSub} style={{ marginRight: 4 }} />
-              <Text style={[styles.dateTimeText, { color: currentTheme.inputText }]}>
-                {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={[styles.sectionTitleInline, { color: currentTheme.textSub }]}>
-            {t.milkSourceTitle || 'Sursă / Tip Hrănire'}
-          </Text>
-        </View>
-
-        {showPicker && (
-          <DateTimePicker
-            value={date}
-            mode={pickerMode}
-            is24Hour={false}
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onChangePicker}
-          />
-        )}
-
-        {/* 2. Selecție Tip Lapte */}
-        <View style={styles.sourceGrid}>
-          {sources.map((item) => {
-            const isSelected = milkSource === item.label;
-            return (
-              <TouchableOpacity
-                key={item.label}
-                style={[
-                  styles.sourceOption,
-                  { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border },
-                  isSelected && styles.sourceOptionSelected,
-                ]}
-                onPress={() => setMilkSource(item.label)}
-              >
-                <FontAwesome5
-                  name={item.icon}
-                  size={14}
-                  color={isSelected ? '#FFF' : currentTheme.textSub}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[styles.sourceText, { color: currentTheme.textSub }, isSelected && styles.sourceTextSelected]}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {isPureBreastFeeding ? (
-          <View style={[styles.breastFeedingInfoBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-            <Ionicons name="heart" size={22} color={currentTheme.textMain} style={{ marginRight: 8 }} />
-            <Text style={[styles.breastFeedingInfoText, { color: currentTheme.textMain }]}>
-              Alăptare directă la sân ({milkSource}). Cantitatea în ml nu este necesară.
-            </Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.displayBadge}>
-              <TextInput
-                style={styles.amountInput}
-                keyboardType="numeric"
-                value={String(amount)}
-                onChangeText={(val) => {
-                  const numericValue = val.replace(/[^0-9]/g, '');
-                  setAmount(numericValue ? parseInt(numericValue, 10) : '');
-                }}
-                editable={!isSubmitting}
-              />
-              <Text style={styles.unitText}>ml</Text>
-            </View>
-
-            <View style={styles.quickAmountContainer}>
-              {quickAmounts.map((qty) => (
+            {/* 1. Selector Dată & Oră + Titlu */}
+            <View style={styles.topCompactRow}>
+              <View style={styles.dateTimeBoxesContainer}>
                 <TouchableOpacity
-                  key={qty}
-                  style={[
-                    styles.quickBtn,
-                    { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-                    amount === qty && styles.quickBtnActive,
-                  ]}
-                  onPress={() => setAmount(qty)}
+                  style={[styles.dateTimeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                  onPress={() => openPicker('date')}
                 >
-                  <Text
-                    style={[
-                      styles.quickBtnText,
-                      { color: currentTheme.textSub },
-                      amount === qty && styles.quickBtnTextActive,
-                    ]}
-                  >
-                    {qty} ml
+                  <Ionicons name="calendar-outline" size={16} color={currentTheme.textSub} style={{ marginRight: 4 }} />
+                  <Text style={[styles.dateTimeText, { color: currentTheme.inputText }]}>
+                    {date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
 
-            <View style={styles.sliderWithButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-                onPress={() => setAmount((prev) => Math.max(0, (typeof prev === 'number' ? prev : 0) - 5))}
-                disabled={isSubmitting}
-              >
-                <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>-</Text>
-              </TouchableOpacity>
-
-              <View style={styles.sliderWrapper}>
-                <Slider
-                  value={typeof amount === 'number' ? amount : 0}
-                  onValueChange={(val) => setAmount(Array.isArray(val) ? val[0] : val)}
-                  minimumValue={10}
-                  maximumValue={300}
-                  step={5}
-                  minimumTrackTintColor="#D35400"
-                  thumbTintColor="#D35400"
-                  maximumTrackTintColor={currentTheme.border}
-                />
+                <TouchableOpacity
+                  style={[styles.dateTimeBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                  onPress={() => openPicker('time')}
+                >
+                  <Ionicons name="time-outline" size={16} color={currentTheme.textSub} style={{ marginRight: 4 }} />
+                  <Text style={[styles.dateTimeText, { color: currentTheme.inputText }]}>
+                    {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
-                onPress={() => setAmount((prev) => (typeof prev === 'number' ? prev : 0) + 5)}
-                disabled={isSubmitting}
-              >
-                <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>+</Text>
-              </TouchableOpacity>
+              <Text style={[styles.sectionTitleInline, { color: currentTheme.textSub }]}>
+                {t.milkSourceTitle || 'Sursă / Tip Hrănire'}
+              </Text>
             </View>
-          </>
-        )}
 
-        <TouchableOpacity
-          style={[styles.confirmBtnFullWidth, isSubmitting && styles.confirmBtnDisabled]}
-          onPress={handleSave}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#FFF" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={24} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={styles.confirmBtnText}>{t.save || 'Salvează Înregistrarea'}</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+            {showPicker && (
+              <DateTimePicker
+                value={date}
+                mode={pickerMode}
+                is24Hour={false}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onChangePicker}
+              />
+            )}
+
+            {/* 2. Selecție Tip Lapte */}
+            <View style={styles.sourceGrid}>
+              {sources.map((item) => {
+                const isSelected = milkSource === item.label;
+                return (
+                  <TouchableOpacity
+                    key={item.label}
+                    style={[
+                      styles.sourceOption,
+                      { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border },
+                      isSelected && styles.sourceOptionSelected,
+                    ]}
+                    onPress={() => setMilkSource(item.label)}
+                  >
+                    <FontAwesome5
+                      name={item.icon}
+                      size={14}
+                      color={isSelected ? '#FFF' : currentTheme.textSub}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[styles.sourceText, { color: currentTheme.textSub }, isSelected && styles.sourceTextSelected]}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {isPureBreastFeeding ? (
+              <View style={[styles.breastFeedingInfoBox, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+                <Ionicons name="heart" size={22} color={currentTheme.textMain} style={{ marginRight: 8 }} />
+                <Text style={[styles.breastFeedingInfoText, { color: currentTheme.textMain }]}>
+                  Alăptare directă la sân ({milkSource}). Cantitatea în ml nu este necesară.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.displayBadge}>
+                  <TextInput
+                    style={styles.amountInput}
+                    keyboardType="numeric"
+                    value={String(amount)}
+                    onChangeText={(val) => {
+                      const numericValue = val.replace(/[^0-9]/g, '');
+                      setAmount(numericValue ? parseInt(numericValue, 10) : '');
+                    }}
+                    editable={!isSubmitting}
+                  />
+                  <Text style={styles.unitText}>ml</Text>
+                </View>
+
+                <View style={styles.quickAmountContainer}>
+                  {quickAmounts.map((qty) => (
+                    <TouchableOpacity
+                      key={qty}
+                      style={[
+                        styles.quickBtn,
+                        { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                        amount === qty && styles.quickBtnActive,
+                      ]}
+                      onPress={() => setAmount(qty)}
+                    >
+                      <Text
+                        style={[
+                          styles.quickBtnText,
+                          { color: currentTheme.textSub },
+                          amount === qty && styles.quickBtnTextActive,
+                        ]}
+                      >
+                        {qty} ml
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.sliderWithButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                    onPress={() => setAmount((prev) => Math.max(0, (typeof prev === 'number' ? prev : 0) - 5))}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>-</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.sliderWrapper}>
+                    <Slider
+                      value={typeof amount === 'number' ? amount : 0}
+                      onValueChange={(val) => setAmount(Array.isArray(val) ? val[0] : val)}
+                      minimumValue={10}
+                      maximumValue={300}
+                      step={5}
+                      minimumTrackTintColor="#D35400"
+                      thumbTintColor="#D35400"
+                      maximumTrackTintColor={currentTheme.border}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.sliderStepBtn, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                    onPress={() => setAmount((prev) => (typeof prev === 'number' ? prev : 0) + 5)}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={[styles.sliderStepBtnText, { color: currentTheme.textMain }]}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[styles.confirmBtnFullWidth, isSubmitting && styles.confirmBtnDisabled]}
+              onPress={handleSave}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={24} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.confirmBtnText}>{t.save || 'Salvează Înregistrarea'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -152,26 +152,19 @@ export const sendToSheet = async (url, data) => {
 
 // --- HELPERE GENERICE PENTRU EDITARE ȘI ȘTERGERE ---
 
-/**
- * Șterge o înregistrare după ID atât local, cât și din Google Sheets.
- */
 export const deleteEntryById = async (itemId, currentEntries, sheetUrl) => {
   try {
     const cleanId = String(itemId).replace(/^'/, '').trim();
 
-    // 1. Găsim elementul ca să-i luăm datele (tip, dată, etc.)
     const targetItem = (currentEntries || []).find(
       (item) => String(item?.id || '').replace(/^'/, '').trim() === cleanId
     );
 
-    // 2. Eliminăm elementul din lista locală
     const updatedEntries = (currentEntries || []).filter(
       (item) => String(item?.id || '').replace(/^'/, '').trim() !== cleanId
     );
     await saveLocalEntries(updatedEntries);
 
-    // 3. Trimitem în Google Sheets linia cu valoarea goală (value: '')
-    // exact cum funcționa înainte ca să fie ignorată de aplicație
     const forcedOffline = await getForceOffline();
     if (sheetUrl && !forcedOffline) {
       const deletionPayload = {
@@ -179,7 +172,7 @@ export const deleteEntryById = async (itemId, currentEntries, sheetUrl) => {
         date: targetItem?.date || '',
         time: targetItem?.time || '',
         type: targetItem?.type || '',
-        value: '', // <--- Aceasta este cheia pe care entriesMap o șterge automat din listă
+        value: '',
         fullDateTime: targetItem?.fullDateTime || '',
       };
 
@@ -193,9 +186,6 @@ export const deleteEntryById = async (itemId, currentEntries, sheetUrl) => {
   }
 };
 
-/**
- * Actualizează valoarea unei intrări existente (înlocuiește elementul cu același ID)
- */
 export const updateEntryValue = async (itemToEdit, newValue, currentEntries, sheetUrl) => {
   if (!itemToEdit) return currentEntries;
 
@@ -209,7 +199,6 @@ export const updateEntryValue = async (itemToEdit, newValue, currentEntries, she
     fullDateTime: nowString,
   };
 
-  // Înlocuim elementul existent în loc să adăugăm unul nou
   const updatedEntries = currentEntries.map((item) => {
     const cleanId = String(item.id || '').replace(/^'/, '').trim();
     return cleanId === cleanTargetId ? updatedEntry : item;
@@ -265,13 +254,12 @@ export const saveTheme = async (theme) => {
   }
 };
 
-// Adaugă în storage.js:
 const LANGUAGE_KEY = '@baby_tracker_language';
 
 export async function getLanguage() {
   try {
     const lang = await AsyncStorage.getItem(LANGUAGE_KEY);
-    return lang || 'ro'; // Default română
+    return lang || 'ro';
   } catch (e) {
     return 'ro';
   }
@@ -298,18 +286,17 @@ export const saveFontSize = async (size) => {
 export const getFontSize = async () => {
   try {
     const size = await AsyncStorage.getItem(FONT_SIZE_KEY);
-    return size || 'normal'; // valoarea implicită
+    return size || 'normal';
   } catch (e) {
     console.error('Eroare la citirea dimensiunii fontului:', e);
     return 'normal';
   }
 };
 
-// Funcții pentru LastEvents default
 export const getLastEventsDefault = async () => {
   try {
     const value = await AsyncStorage.getItem('@BabyTrack_lastEventsDefault');
-    return value !== null ? JSON.parse(value) : true; // Default activ (true) sau false după preferință
+    return value !== null ? JSON.parse(value) : true;
   } catch (e) {
     return true;
   }
@@ -323,11 +310,10 @@ export const saveLastEventsDefault = async (value) => {
   }
 };
 
-// Funcții pentru Stats Dashboard default
 export const getStatsDefault = async () => {
   try {
     const value = await AsyncStorage.getItem('@BabyTrack_statsDefault');
-    return value !== null ? JSON.parse(value) : false; // Default ascuns (false)
+    return value !== null ? JSON.parse(value) : false;
   } catch (e) {
     return false;
   }
@@ -338,5 +324,63 @@ export const saveStatsDefault = async (value) => {
     await AsyncStorage.setItem('@BabyTrack_statsDefault', JSON.stringify(value));
   } catch (e) {
     console.error(e);
+  }
+};
+
+export const getBabyBirthDate = async () => {
+  try {
+    return await AsyncStorage.getItem('@baby_birth_date');
+  } catch (e) {
+    console.error('Eroare la citirea datei de naștere:', e);
+    return null;
+  }
+};
+
+export const saveBabyBirthDate = async (dateStr) => {
+  try {
+    await AsyncStorage.setItem('@baby_birth_date', dateStr);
+  } catch (e) {
+    console.error('Eroare la salvarea datei de naștere:', e);
+  }
+};
+
+export const syncBabySettingsToSheet = async (sheetUrl, babyName, birthDate) => {
+  const forcedOffline = await getForceOffline();
+  if (forcedOffline || !sheetUrl) return;
+
+  try {
+    const payload = {
+      type: 'settings',
+      babyName: babyName || '',
+      babyBirthDate: birthDate || '',
+      timestamp: new Date().toISOString(),
+    };
+
+    await fetch(sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.log('Eroare la sincronizarea setărilor în Sheet:', err);
+  }
+};
+
+// --- Pentru diversificare (Setat pe false implicit) ---
+export const getDiversificationEnabled = async () => {
+  try {
+    const val = await AsyncStorage.getItem('@diversification_enabled');
+    return val !== null ? JSON.parse(val) : false; // 👈 Implicit dezactivat (false)
+  } catch (e) {
+    console.error('Eroare la citirea setării de diversificare:', e);
+    return false;
+  }
+};
+
+export const saveDiversificationEnabled = async (isEnabled) => {
+  try {
+    await AsyncStorage.setItem('@diversification_enabled', JSON.stringify(isEnabled));
+  } catch (e) {
+    console.error('Eroare la salvarea setării de diversificare:', e);
   }
 };

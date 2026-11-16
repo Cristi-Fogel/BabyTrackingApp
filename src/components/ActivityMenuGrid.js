@@ -187,7 +187,10 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
             </TouchableOpacity>
 
             {/* Buton Scutec */}
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#8E44AC' }]} onPress={() => Alert.alert('În curând', 'Modulul Scutec va fi disponibil în curând.')}>
+            <TouchableOpacity
+              style={[styles.menuCard, { backgroundColor: '#8E44AC' }]}
+              onPress={() => navigation.navigate('Diapers')}
+            >
               <MaterialCommunityIcons name="baby-face-outline" size={20} color="#FFF" />
               <Text style={styles.menuText}>Scutec</Text>
             </TouchableOpacity>
@@ -201,7 +204,10 @@ export default function ActivityMenuGrid({ navigation, t, activeMenuPage, setAct
             </TouchableOpacity>
 
             {/* Buton Note */}
-            <TouchableOpacity style={[styles.menuCard, { backgroundColor: '#D35400' }]} onPress={() => Alert.alert('În curând', 'Modulul Note va fi disponibil în curând.')}>
+            <TouchableOpacity style={[styles.menuCard,
+                { backgroundColor: '#D35400' }]}
+                onPress={() => navigation.navigate('Notes')}
+            >
               <Ionicons name="book-outline" size={20} color="#FFF" />
               <Text style={styles.menuText}>Note</Text>
             </TouchableOpacity>
