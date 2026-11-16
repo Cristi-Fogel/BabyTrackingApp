@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import ZZZAnimation from './ZZZAnimation';
 import { getFontSize } from '../services/storage';
 
 export default function HistorySection({
@@ -41,13 +40,13 @@ export default function HistorySection({
 
   const getDynamicStyles = () => {
     if (fontSizeSetting === 'small') {
-      return { title: 10, sub: 9, value: 11, header: 10, stat: 9 };
+      return { title: 11, sub: 9, value: 12, header: 11, stat: 10 };
     } else if (fontSizeSetting === 'large') {
-      return { title: 14, sub: 12, value: 15, header: 13, stat: 11 };
+      return { title: 15, sub: 13, value: 16, header: 14, stat: 12 };
     } else if (fontSizeSetting === 'extraLarge') {
-      return { title: 18, sub: 15, value: 19, header: 16, stat: 13 };
+      return { title: 18, sub: 15, value: 19, header: 17, stat: 14 };
     }
-    return { title: 11, sub: 10, value: 12, header: 12, stat: 10 };
+    return { title: 13, sub: 11, value: 14, header: 13, stat: 11 };
   };
 
   const dynamicFont = getDynamicStyles();
@@ -177,13 +176,13 @@ export default function HistorySection({
         <View style={styles.sleepDetailsContainer}>
           {sleepTimeStr ? (
             <View style={styles.sleepDetailRow}>
-              <Ionicons name="moon" size={13} color="#2980B9" style={{ marginRight: 4 }} />
+              <Ionicons name="moon" size={12} color="#2980B9" style={{ marginRight: 3 }} />
               <Text style={[styles.sleepDetailTextSleep, { color: '#2980B9', fontSize: dynamicFont.sub }]}>{sleepTimeStr}</Text>
             </View>
           ) : null}
           {wakeTimeStr ? (
             <View style={[styles.sleepDetailRow, { marginTop: 2 }]}>
-              <Ionicons name="sunny" size={13} color="#E67E22" style={{ marginRight: 4 }} />
+              <Ionicons name="sunny" size={12} color="#E67E22" style={{ marginRight: 3 }} />
               <Text style={[styles.sleepDetailTextWake, { color: '#E67E22', fontSize: dynamicFont.sub }]}>{wakeTimeStr}</Text>
             </View>
           ) : null}
@@ -195,22 +194,40 @@ export default function HistorySection({
   };
 
   const renderIconForType = (type, value) => {
-    const cleanType = String(type || '').toLowerCase();
-    const cleanValue = String(value || '').toLowerCase();
+      const cleanType = String(type || '').toLowerCase();
+      const cleanValue = String(value || '').toLowerCase();
 
-    if (cleanValue.includes('sân') || cleanValue.includes('sâni') || cleanValue.includes('alăptare')) {
-      return <Ionicons name="heart" size={16} color="#D81B60" style={{ marginRight: 8 }} />;
-    }
-    if (cleanType === 'milk' || cleanType === 'lapte') {
-      return <FontAwesome5 name="wine-bottle" size={16} color="#D35400" style={{ marginRight: 8 }} />;
-    }
-    if (cleanType === 'growth' || cleanType === 'crestere') {
-      return <MaterialCommunityIcons name="ruler" size={18} color="#27AE60" style={{ marginRight: 8 }} />;
-    }
-    if (cleanType === 'mama' || cleanType === 'alaptare') {
-      return <Ionicons name="woman-outline" size={18} color="#D81B60" style={{ marginRight: 8 }} />;
-    }
-    return <Ionicons name="moon-outline" size={18} color="#2980B9" style={{ marginRight: 8 }} />;
+      if (cleanType === 'diaper' || cleanType === 'scutec' || cleanType === 'scutece') {
+        return <Ionicons name="water-outline" size={17} color="#9B59B6" style={{ marginRight: 8 }} />;
+      }
+      if (cleanType === 'diversification' || cleanType === 'food' || cleanType === 'solid') {
+        return <Ionicons name="restaurant" size={17} color="#E67E22" style={{ marginRight: 8 }} />;
+      }
+      if (cleanValue.includes('sân') || cleanValue.includes('sâni') || cleanValue.includes('alăptare')) {
+        return <Ionicons name="heart" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
+      }
+      if (cleanType === 'milk' || cleanType === 'lapte') {
+        return <FontAwesome5 name="wine-bottle" size={15} color="#D35400" style={{ marginRight: 8 }} />;
+      }
+      if (cleanType === 'growth' || cleanType === 'crestere') {
+        return <MaterialCommunityIcons name="ruler" size={17} color="#27AE60" style={{ marginRight: 8 }} />;
+      }
+      if (cleanType === 'mama' || cleanType === 'alaptare') {
+        return <Ionicons name="woman-outline" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
+      }
+      return <Ionicons name="moon-outline" size={17} color="#2980B9" style={{ marginRight: 8 }} />;
+    };
+
+  const renderDiversificationDetails = (item) => {
+    const reaction = item?.reaction || item?.allergenStatus || 'Fără reacții';
+    const isGood = !reaction.toLowerCase().includes('erupție') && !reaction.toLowerCase().includes('reactie') && !reaction.toLowerCase().includes('alergie');
+
+    return (
+      <View style={[styles.reactionBadge, { backgroundColor: isGood ? '#E8F8F5' : '#FEF9E7', borderColor: isGood ? '#A3E4D7' : '#F9E79F' }]}>
+        <Ionicons name={isGood ? 'checkmark-circle' : 'alert-circle'} size={12} color={isGood ? '#27AE60' : '#D35400'} style={{ marginRight: 3 }} />
+        <Text style={[styles.reactionText, { color: isGood ? '#117A65' : '#B9770E', fontSize: dynamicFont.sub }]}>{reaction}</Text>
+      </View>
+    );
   };
 
   const calculateDayStats = (entries, dateStr, todayStr) => {
@@ -302,6 +319,7 @@ export default function HistorySection({
 
         const isBreastFeedingEntry = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
         const isMilkFeeding = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeedingEntry;
+        const isDiversificationEntry = type === 'diversification' || type === 'food' || type === 'solid';
 
         if (type === 'sleep') {
           const splitParts = getSplitSleepParts(item, dateStr);
@@ -323,6 +341,10 @@ export default function HistorySection({
           }
         } else if (filterType === 'milk') {
           if (isMilkFeeding) {
+            expandedGroupedEntries[dateStr].push(item);
+          }
+        } else if (filterType === 'diversification') {
+          if (isDiversificationEntry) {
             expandedGroupedEntries[dateStr].push(item);
           }
         } else if (type === filterType) {
@@ -387,31 +409,36 @@ export default function HistorySection({
 
   const isGrowthFilter = filterType === 'growth';
   const isMilkFilter = filterType === 'milk';
-  const hideSunMoon = isGrowthFilter || isMilkFilter;
+  const isDiversificationFilter = filterType === 'diversification';
+  const hideSunMoon = isGrowthFilter || isMilkFilter || isDiversificationFilter;
 
   return (
-    <View style={[styles.card, { flex: 1, marginTop: 2, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-      <View style={styles.filterRowContainer}>
-        <TouchableOpacity style={[styles.filterIconChip, filterType === 'all' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('all')}>
-          <Ionicons name="apps-outline" size={18} color={filterType === 'all' ? '#FFF' : currentTheme.textSub} />
+    <View style={[styles.card, { flex: 1, marginTop: 4, backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+      {/* 🧭 FILTRE PRINCIPALE */}
+      <View style={[styles.filterRowContainer, { borderBottomColor: currentTheme.border }]}>
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'all' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'all' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('all')}>
+          <Ionicons name="apps-outline" size={17} color={filterType === 'all' ? '#FFF' : currentTheme.textSub} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterIconChip, filterType === 'milk' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('milk')}>
-          <FontAwesome5 name="wine-bottle" size={16} color={filterType === 'milk' ? '#FFF' : '#D35400'} />
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'milk' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'milk' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('milk')}>
+          <FontAwesome5 name="wine-bottle" size={15} color={filterType === 'milk' ? '#FFF' : '#D35400'} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterIconChip, filterType === 'sleep' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('sleep')}>
-          <Ionicons name="moon-outline" size={18} color={filterType === 'sleep' ? '#FFF' : '#2980B9'} />
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'sleep' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'sleep' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('sleep')}>
+          <Ionicons name="moon-outline" size={17} color={filterType === 'sleep' ? '#FFF' : '#2980B9'} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('growth')}>
-          <MaterialCommunityIcons name="ruler" size={18} color={filterType === 'growth' ? '#FFF' : '#27AE60'} />
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'diversification' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'diversification' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('diversification')}>
+          <Ionicons name="restaurant" size={17} color={filterType === 'diversification' ? '#FFF' : '#E67E22'} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterIconChip, filterType === 'mama' && styles.filterIconChipActive, { borderColor: currentTheme.border }]} onPress={() => setFilterType('mama')}>
-          <Ionicons name="woman-outline" size={18} color={filterType === 'mama' ? '#FFF' : '#D81B60'} />
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'growth' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('growth')}>
+          <MaterialCommunityIcons name="ruler" size={17} color={filterType === 'growth' ? '#FFF' : '#27AE60'} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.filterIconChip, filterType === 'mama' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'mama' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('mama')}>
+          <Ionicons name="woman-outline" size={17} color={filterType === 'mama' ? '#FFF' : '#D81B60'} />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         style={styles.historyList}
-        showsVerticalScrollIndicator={true}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={onRefresh} colors={[currentTheme.tint]} tintColor={currentTheme.tint} />
         }
@@ -433,20 +460,22 @@ export default function HistorySection({
 
             return (
               <View key={dateStr} style={styles.dayGroupContainer}>
+                {/* 📅 HEADER ZI (compactat) */}
                 <TouchableOpacity
                   style={[styles.dayHeaderRow, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
                   onPress={() => toggleDayCollapse(dateStr)}
+                  activeOpacity={0.8}
                 >
                   <View style={styles.rowBetween}>
                     <View style={styles.row}>
-                      <Ionicons name={isCollapsed ? 'chevron-forward' : 'chevron-down'} size={16} color={currentTheme.textMain} style={{ marginRight: 6 }} />
-                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain, fontSize: dynamicFont.header }]}>📅 {displayDateLabel}</Text>
+                      <Ionicons name={isCollapsed ? 'chevron-forward' : 'chevron-down'} size={14} color={currentTheme.textMain} style={{ marginRight: 5 }} />
+                      <Text style={[styles.dayHeaderTitle, { color: currentTheme.textMain, fontSize: dynamicFont.header }]}>{displayDateLabel}</Text>
                     </View>
                     <View style={styles.row}>
                       {stats.totalMilk > 0 && <Text style={[styles.dayStatText, { color: '#D35400', marginRight: 6, fontSize: dynamicFont.stat }]}>🍼 {stats.totalMilk}ml</Text>}
                       {!hideSunMoon && (
                         <>
-                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 6, fontSize: dynamicFont.stat }]}>☀️ {stats.awakeHours}h</Text>
+                          <Text style={[styles.dayStatText, { color: '#E67E22', marginRight: 5, fontSize: dynamicFont.stat }]}>☀️ {stats.awakeHours}h</Text>
                           <Text style={[styles.dayStatText, { color: '#2980B9', fontSize: dynamicFont.stat }]}>🌙 {stats.sleepHours}h</Text>
                         </>
                       )}
@@ -454,12 +483,14 @@ export default function HistorySection({
                   </View>
                 </TouchableOpacity>
 
+                {/* 📝 LISTĂ EVENIMENTE ZIUA RESPECTIVĂ (compactat) */}
                 {!isCollapsed &&
                   dayEntries.map((item, index) => {
                     const itemKey = `entry_${dateStr}_${index}_${item?.id || index}`;
                     const formattedTime = cleanTime(item?.time);
                     const isSleep = String(item?.type || '').toLowerCase() === 'sleep';
                     const isGrowth = String(item?.type || '').toLowerCase() === 'growth' || String(item?.type || '').toLowerCase() === 'crestere';
+                    const isDiversification = String(item?.type || '').toLowerCase() === 'diversification' || String(item?.type || '').toLowerCase() === 'food' || String(item?.type || '').toLowerCase() === 'solid';
                     const { heightDiff, weightDiff } = isGrowth ? getCalculatedGrowthDiff(item) : { heightDiff: '', weightDiff: '' };
 
                     const realIdForAction = item.originalId || item.id;
@@ -467,12 +498,11 @@ export default function HistorySection({
                       ? (item.customDurationLabel || getSleepDurationText(item?.value))
                       : '';
 
-                    const isSleepingNow = isSleep && String(item?.value || '').toLowerCase().includes('adormit la') && !String(item?.value || '').toLowerCase().includes('trezit la');
-
                     return (
                       <TouchableOpacity
                         key={itemKey}
-                        style={[styles.historyItem, { borderBottomColor: currentTheme.borderColorLight }]}
+                        style={[styles.historyItemCard, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                        activeOpacity={0.7}
                         onLongPress={() => {
                           if (onOpenActionModal) {
                             onOpenActionModal({ ...item, id: realIdForAction, date: dateStr, time: item.time });
@@ -481,12 +511,12 @@ export default function HistorySection({
                       >
                         <View style={[styles.row, { flex: 1, marginRight: 8 }]}>
                           {renderIconForType(item?.type, item?.value)}
-                          <View style={{ flex: 1 }}>
+                          <View style={{ flex: 1, justifyContent: 'center' }}>
                             <Text style={[styles.historyType, { color: currentTheme.textMain, fontSize: dynamicFont.title }]}>
                               {translateType(item?.type)}
                             </Text>
                             {isGrowth ? (
-                              <View style={{ marginTop: 2 }}>
+                              <View style={{ marginTop: 1 }}>
                                 {heightDiff ? <Text style={[styles.growthSubText, { fontSize: dynamicFont.sub }]}>📏 {heightDiff}</Text> : null}
                                 {weightDiff ? <Text style={[styles.growthSubText, { fontSize: dynamicFont.sub }]}>⚖️ {weightDiff}</Text> : null}
                               </View>
@@ -499,7 +529,7 @@ export default function HistorySection({
                         </View>
 
                         <View style={styles.valueRightContainer}>
-                          {isSleep ? renderSleepDetails(item?.value, item) : (
+                          {isSleep ? renderSleepDetails(item?.value, item) : isDiversification ? renderDiversificationDetails(item) : (
                             <Text style={[styles.historyValue, { color: isGrowth ? '#27AE60' : currentTheme.tint, fontSize: dynamicFont.value }]}>
                               {item?.value ? item.value : '-'}
                             </Text>
@@ -518,27 +548,29 @@ export default function HistorySection({
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 8, borderRadius: 10, marginBottom: 4, elevation: 1, borderWidth: 1 },
+  card: { padding: 8, borderRadius: 12, marginBottom: 4, elevation: 2, borderWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' },
-  filterRowContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 4, marginBottom: 2, borderBottomWidth: 1, borderBottomColor: '#eee', alignItems: 'center' },
-  filterIconChip: { padding: 6, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flex: 1, marginHorizontal: 3, backgroundColor: 'transparent' },
-  filterIconChipActive: { backgroundColor: '#D35400', borderColor: '#D35400' },
-  dayGroupContainer: { marginBottom: 6 },
-  dayHeaderRow: { padding: 6, borderRadius: 6, borderWidth: 1, marginBottom: 4 },
-  dayHeaderTitle: { fontWeight: 'bold' },
-  dayStatText: { fontWeight: 'bold' },
+  filterRowContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 6, marginBottom: 6, borderBottomWidth: 1, alignItems: 'center' },
+  filterIconChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flex: 1, marginHorizontal: 2 },
+  filterIconChipActive: { borderColor: '#D35400' },
+  dayGroupContainer: { marginBottom: 8 },
+  dayHeaderRow: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, marginBottom: 4 }, // 👈 Redus padding vertical
+  dayHeaderTitle: { fontWeight: '700' },
+  dayStatText: { fontWeight: '700' },
   historyList: { flex: 1, marginTop: 2 },
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, paddingLeft: 10 },
-  historyType: { fontWeight: 'bold' },
-  historyDateTime: { marginTop: 1, fontWeight: '500' },
+  historyItemCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, marginBottom: 4 }, // 👈 Redus padding vertical și marjă
+  historyType: { fontWeight: '700', marginBottom: 0 },
+  historyDateTime: { fontWeight: '500' },
   growthSubText: { fontWeight: '600', color: '#27AE60', marginTop: 1 },
-  valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center', paddingTop: 2 },
-  historyValue: { fontWeight: 'bold', textAlign: 'right' },
-  emptyText: { textAlign: 'center', marginTop: 10, fontSize: 12 },
+  valueRightContainer: { alignItems: 'flex-end', justifyContent: 'center' },
+  historyValue: { fontWeight: '700', textAlign: 'right' },
+  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 13 },
   sleepDetailsContainer: { alignItems: 'flex-end' },
   sleepDetailRow: { flexDirection: 'row', alignItems: 'center' },
-  sleepDetailTextSleep: { fontWeight: 'bold' },
-  sleepDetailTextWake: { fontWeight: 'bold' },
-  sleepDetailTextActive: { fontWeight: 'bold', fontStyle: 'italic' },
+  sleepDetailTextSleep: { fontWeight: '700' },
+  sleepDetailTextWake: { fontWeight: '700' },
+  sleepDetailTextActive: { fontWeight: '700', fontStyle: 'italic' },
+  reactionBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1 },
+  reactionText: { fontWeight: '700' },
 });

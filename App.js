@@ -12,6 +12,8 @@ import GrowthTrackerScreen from './src/screens/GrowthTrackerScreen';
 import ReminderScreen from './src/screens/ReminderScreen'
 import AlarmsScreen from './src/screens/AlarmsScreen';
 import VaccinesScreen from './src/screens/VaccinesScreen';
+import DiapersScreen from './src/screens/DiapersScreen';
+import NotesScreen from './src/screens/NotesScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -31,6 +33,8 @@ export default function App() {
         <Stack.Screen name="Reminders" component={ReminderScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Alarms" component={AlarmsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Vaccines" component={VaccinesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Diapers" component={DiapersScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Notes" component={NotesScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

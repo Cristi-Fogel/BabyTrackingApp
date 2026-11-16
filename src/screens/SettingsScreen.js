@@ -1,28 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  StyleSheet,
-  Text,
   View,
-  TextInput,
+  Text,
+  StyleSheet,
   TouchableOpacity,
-  ScrollView,
+  TextInput,
   Alert,
-  SafeAreaView,
-  Platform,
-  StatusBar,
-  Switch,
+  ScrollView,
   ActivityIndicator,
+  SafeAreaView,
+  StatusBar,
+  Platform,
   KeyboardAvoidingView,
+  Keyboard,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   getStoredSheetUrl,
   saveSheetUrl,
   getBabyName,
   saveBabyName,
+  getBabyBirthDate,
+  saveBabyBirthDate,
   getDropsEnabled,
   saveDropsEnabled,
+  getDiversificationEnabled,
+  saveDiversificationEnabled,
   getForceOffline,
   saveForceOffline,
   getTheme,
@@ -44,7 +50,9 @@ import Constants from 'expo-constants';
 export default function SettingsScreen({ navigation }) {
   const [sheetUrl, setSheetUrl] = useState('');
   const [babyName, setBabyName] = useState('');
+  const [babyBirthDate, setBabyBirthDate] = useState('');
   const [dropsEnabled, setDropsEnabled] = useState(true);
+  const [diversificationEnabled, setDiversificationEnabled] = useState(false); // 👈 Implicit false
   const [forceOffline, setForceOffline] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentLang, setCurrentLang] = useState('ro');
@@ -52,6 +60,10 @@ export default function SettingsScreen({ navigation }) {
 
   const [lastEventsDefault, setLastEventsDefault] = useState(true);
   const [statsDefault, setStatsDefault] = useState(false);
+
+  // Stări pentru DatePicker
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
 
   const [loading, setLoading] = useState(false);
 
@@ -64,7 +76,9 @@ export default function SettingsScreen({ navigation }) {
         try {
           const url = await getStoredSheetUrl();
           const name = await getBabyName();
+          const birthDate = await getBabyBirthDate();
           const drops = await getDropsEnabled();
+          const divEnabled = await getDiversificationEnabled();
           const offline = await getForceOffline();
           const themeMode = await getTheme();
           const lang = await getLanguage();
@@ -75,7 +89,15 @@ export default function SettingsScreen({ navigation }) {
           if (isMounted) {
             setSheetUrl(url || '');
             setBabyName(name || '');
+            setBabyBirthDate(birthDate || '');
+            if (birthDate) {
+              const parsed = new Date(birthDate);
+              if (!isNaN(parsed.getTime())) {
+                setPickerDate(parsed);
+              }
+            }
             setDropsEnabled(drops !== null ? !!drops : true);
+            setDiversificationEnabled(divEnabled !== null ? !!divEnabled : false);
             setForceOffline(!!offline);
             setIsDarkMode(themeMode === 'dark');
             setCurrentLang(lang || 'ro');
@@ -96,21 +118,43 @@ export default function SettingsScreen({ navigation }) {
     }, [])
   );
 
+  const handleDateChange = (event, selectedDate) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (selectedDate) {
+      setPickerDate(selectedDate);
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      setBabyBirthDate(`${year}-${month}-${day}`);
+    }
+  };
+
   const handleSaveAll = async () => {
+    if (loading) return;
     setLoading(true);
     try {
+      Keyboard.dismiss();
       await saveSheetUrl(sheetUrl.trim());
       await saveBabyName(babyName.trim());
+      await saveBabyBirthDate(babyBirthDate.trim());
       await saveDropsEnabled(dropsEnabled);
+      await saveDiversificationEnabled(diversificationEnabled);
       await saveForceOffline(forceOffline);
       await saveTheme(isDarkMode ? 'dark' : 'light');
       await saveLanguage(currentLang);
       await saveFontSize(fontSize);
       await saveLastEventsDefault(lastEventsDefault);
       await saveStatsDefault(statsDefault);
+
+      if (navigation && navigation.canGoBack && navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Home');
+      }
     } catch (e) {
       Alert.alert('Eroare', 'Nu s-au putut salva setările.');
-    } finally {
       setLoading(false);
     }
   };
@@ -122,13 +166,12 @@ export default function SettingsScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: currentTheme.background }]}>
       <StatusBar barStyle={currentTheme.statusBar} backgroundColor={currentTheme.background} translucent={false} />
 
-      {/* 🛡️ KeyboardAvoidingView împinge conținutul în sus când apare tastatura */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* 📌 1. HEADER FIX SUS */}
+        {/* 📌 HEADER */}
         <View style={[styles.fixedHeader, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
           <View style={styles.rowBetween}>
             <View>
@@ -145,7 +188,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
 
-        {/* 📜 2. CONȚINUT SCROLLABIL LA MIJLOC */}
+        {/* 📜 SCROLL CONTENT */}
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
@@ -241,7 +284,7 @@ export default function SettingsScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Nume & Sheet URL */}
+          {/* Nume, Dată Naștere (cu DatePicker) & Sheet URL */}
           <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
             <Text style={[styles.label, { color: currentTheme.textMain }]}>Nume Bebeluș:</Text>
             <TextInput
@@ -251,6 +294,27 @@ export default function SettingsScreen({ navigation }) {
               placeholder="Introduceți numele bebelușului..."
               placeholderTextColor={currentTheme.inputPlaceholder}
             />
+
+            <Text style={[styles.label, { color: currentTheme.textMain, marginTop: 12 }]}>Data Nașterii:</Text>
+            <TouchableOpacity
+              style={[styles.datePickerBtn, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color={currentTheme.textSub} style={{ marginRight: 8 }} />
+              <Text style={[styles.datePickerBtnText, { color: babyBirthDate ? currentTheme.inputText : currentTheme.inputPlaceholder }]}>
+                {babyBirthDate || 'Selectează data nașterii...'}
+              </Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={pickerDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                maximumDate={new Date()}
+                onChange={handleDateChange}
+              />
+            )}
 
             <Text style={[styles.label, { color: currentTheme.textMain, marginTop: 12 }]}>Google Sheet WebApp URL:</Text>
             <TextInput
@@ -263,9 +327,18 @@ export default function SettingsScreen({ navigation }) {
             />
           </View>
 
-          {/* Toggle-uri principale */}
+          {/* Toggle-uri principale (inclusiv Diversificarea setată pe false) */}
           <View style={[styles.card, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
             <View style={styles.settingRow}>
+              <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Activează modul Diversificare 🥑</Text>
+              <Switch
+                value={diversificationEnabled}
+                onValueChange={setDiversificationEnabled}
+                trackColor={{ false: '#767577', true: '#D35400' }}
+              />
+            </View>
+
+            <View style={[styles.settingRow, { marginTop: 12 }]}>
               <Text style={[styles.settingText, { color: currentTheme.textMain }]}>Activează notificarea picături zilnice 💧</Text>
               <Switch
                 value={dropsEnabled}
@@ -294,7 +367,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* 🚀 3. FOOTER FIX JOS */}
+        {/* 🚀 FOOTER FIX JOS */}
         <View style={[styles.fixedFooter, { backgroundColor: currentTheme.background }]}>
           <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAll} disabled={loading}>
             {loading ? (
@@ -329,7 +402,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 10,
+    paddingBottom: 20,
   },
   fixedFooter: {
     paddingTop: 6,
@@ -349,6 +422,15 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: 'bold', marginBottom: 6 },
   labelInline: { fontSize: 13, fontWeight: 'bold' },
   input: { borderWidth: 1, borderRadius: 6, padding: 8, fontSize: 13, marginTop: 4 },
+  datePickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 10,
+    marginTop: 4,
+  },
+  datePickerBtnText: { fontSize: 13 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingText: { fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },
   langBtn: { flex: 1, paddingVertical: 8, borderWidth: 1, borderRadius: 8, alignItems: 'center', marginHorizontal: 3 },

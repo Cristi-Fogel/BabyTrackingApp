@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "BabyTrackApp",
-    "slug": "BabyTrackApp",
-    "version": "0.4.0",
+    "name": "BabyTracks",
+    "slug": "BabyTracks",
+    "version": "0.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,7 +12,7 @@
     "android": {
       "package": "com.anonymous.BabyTrackApp",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
       }
     },
