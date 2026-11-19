@@ -22,6 +22,7 @@ import {
   sendToSheet,
   getBabyName,
   getDropsEnabled,
+  getDiversificationEnabled,
   getForceOffline,
   getTheme,
   getLanguage,
@@ -40,6 +41,7 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [babyName, setBabyName] = useState('Bebelușul');
   const [dropsEnabled, setDropsEnabled] = useState(false);
+  const [diversificationEnabled, setDiversificationEnabled] = useState(false);
 
   const [isOffline, setIsOffline] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(lightTheme);
@@ -62,6 +64,12 @@ export default function HomeScreen({ navigation }) {
 
   const isSyncingRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
+
+  useEffect(() => {
+    if (!diversificationEnabled && filterType === 'diversification') {
+      setFilterType('all');
+    }
+  }, [diversificationEnabled, filterType]);
 
   const cleanDate = (dateStr) => {
     if (!dateStr) return '';
@@ -119,6 +127,7 @@ export default function HomeScreen({ navigation }) {
           const localData = await getLocalEntries();
           const savedBabyName = await getBabyName();
           const savedDropsEnabled = await getDropsEnabled();
+          const savedDiversificationEnabled = await getDiversificationEnabled();
           const forcedOffline = await getForceOffline();
           const themeMode = await getTheme();
           const langCode = await getLanguage();
@@ -128,8 +137,9 @@ export default function HomeScreen({ navigation }) {
           if (isMounted) {
             setEntries(safeLocal);
             if (savedBabyName) setBabyName(savedBabyName);
-            setDropsEnabled(savedDropsEnabled);
-            setIsOffline(forcedOffline);
+            setDropsEnabled(!!savedDropsEnabled);
+            setDiversificationEnabled(!!savedDiversificationEnabled);
+            setIsOffline(!!forcedOffline);
             setCurrentTheme(themeMode === 'dark' ? darkTheme : lightTheme);
             setCurrentLang(langCode || 'ro');
           }
@@ -412,6 +422,9 @@ export default function HomeScreen({ navigation }) {
     }
     if (filterType === 'milk') return tItem === 'milk' || tItem === 'lapte';
     if (filterType === 'sleep') return tItem === 'sleep';
+    if (filterType === 'diversification') {
+      return diversificationEnabled && (tItem === 'diversification' || tItem === 'food' || tItem === 'solid');
+    }
     if (filterType === 'growth' || filterType === 'crestere') return tItem === 'growth' || tItem === 'crestere';
     if (filterType === 'mama') return tItem === 'mama' || tItem === 'alaptare';
     return true;
@@ -561,6 +574,7 @@ export default function HomeScreen({ navigation }) {
     const tLower = String(type || '').toLowerCase();
     if (tLower === 'milk' || tLower === 'lapte') return t.milk;
     if (tLower === 'sleep' || tLower === 'somn') return t.sleep;
+    if (tLower === 'diversification' || tLower === 'food' || tLower === 'solid') return t.diversification || 'Diversificare';
     if (tLower === 'growth' || tLower === 'crestere') return t.growth;
     if (tLower === 'mama' || tLower === 'alaptare') return t.mama;
     return tLower.toUpperCase();
@@ -588,7 +602,11 @@ export default function HomeScreen({ navigation }) {
 
       <View style={{ flex: 1 }}>
         {showStats && (
-          <StatsDashboard entries={allUniqueEntries} currentTheme={currentTheme} />
+          <StatsDashboard
+            entries={allUniqueEntries}
+            currentTheme={currentTheme}
+            diversificationEnabled={diversificationEnabled}
+          />
         )}
 
         {showLastEventsBanner && (
@@ -599,6 +617,7 @@ export default function HomeScreen({ navigation }) {
             todayStr={todayStr}
             cleanTime={cleanTime}
             currentTheme={currentTheme}
+            diversificationEnabled={diversificationEnabled}
           />
         )}
 
@@ -621,6 +640,7 @@ export default function HomeScreen({ navigation }) {
           }}
           translateType={translateType}
           t={t}
+          diversificationEnabled={diversificationEnabled}
         />
       </View>
 
@@ -644,6 +664,7 @@ export default function HomeScreen({ navigation }) {
           currentTheme={currentTheme}
           onEntryAdded={handleQuickEntryAdded}
           activeSleepEntry={activeSleepEntry}
+          diversificationEnabled={diversificationEnabled}
         />
       </View>
 

@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { getFontSize } from '../services/storage';
+import { getFontSize, getDiversificationEnabled } from '../services/storage';
 
 export default function HistorySection({
   currentTheme,
@@ -19,24 +19,39 @@ export default function HistorySection({
   onOpenActionModal,
   translateType,
   t,
+  diversificationEnabled: diversificationProp,
 }) {
   const [fontSizeSetting, setFontSizeSetting] = useState('normal');
+  const [diversificationLocal, setDiversificationLocal] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
-      const loadFontSetting = async () => {
-        const fSize = await getFontSize();
+      const loadSettings = async () => {
+        const [fSize, divEnabled] = await Promise.all([
+          getFontSize(),
+          getDiversificationEnabled(),
+        ]);
         if (isMounted) {
           setFontSizeSetting(fSize || 'normal');
+          setDiversificationLocal(!!divEnabled);
         }
       };
-      loadFontSetting();
+      loadSettings();
       return () => {
         isMounted = false;
       };
     }, [])
   );
+
+  const isDivEnabled =
+    diversificationProp !== undefined ? !!diversificationProp : diversificationLocal;
+
+  useEffect(() => {
+    if (!isDivEnabled && filterType === 'diversification') {
+      setFilterType('all');
+    }
+  }, [isDivEnabled, filterType, setFilterType]);
 
   const getDynamicStyles = () => {
     if (fontSizeSetting === 'small') {
@@ -194,29 +209,29 @@ export default function HistorySection({
   };
 
   const renderIconForType = (type, value) => {
-      const cleanType = String(type || '').toLowerCase();
-      const cleanValue = String(value || '').toLowerCase();
+    const cleanType = String(type || '').toLowerCase();
+    const cleanValue = String(value || '').toLowerCase();
 
-      if (cleanType === 'diaper' || cleanType === 'scutec' || cleanType === 'scutece') {
-        return <Ionicons name="water-outline" size={17} color="#9B59B6" style={{ marginRight: 8 }} />;
-      }
-      if (cleanType === 'diversification' || cleanType === 'food' || cleanType === 'solid') {
-        return <Ionicons name="restaurant" size={17} color="#E67E22" style={{ marginRight: 8 }} />;
-      }
-      if (cleanValue.includes('sân') || cleanValue.includes('sâni') || cleanValue.includes('alăptare')) {
-        return <Ionicons name="heart" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
-      }
-      if (cleanType === 'milk' || cleanType === 'lapte') {
-        return <FontAwesome5 name="wine-bottle" size={15} color="#D35400" style={{ marginRight: 8 }} />;
-      }
-      if (cleanType === 'growth' || cleanType === 'crestere') {
-        return <MaterialCommunityIcons name="ruler" size={17} color="#27AE60" style={{ marginRight: 8 }} />;
-      }
-      if (cleanType === 'mama' || cleanType === 'alaptare') {
-        return <Ionicons name="woman-outline" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
-      }
-      return <Ionicons name="moon-outline" size={17} color="#2980B9" style={{ marginRight: 8 }} />;
-    };
+    if (cleanType === 'diaper' || cleanType === 'scutec' || cleanType === 'scutece') {
+      return <Ionicons name="water-outline" size={17} color="#9B59B6" style={{ marginRight: 8 }} />;
+    }
+    if (cleanType === 'diversification' || cleanType === 'food' || cleanType === 'solid') {
+      return <Ionicons name="restaurant" size={17} color="#E67E22" style={{ marginRight: 8 }} />;
+    }
+    if (cleanValue.includes('sân') || cleanValue.includes('sâni') || cleanValue.includes('alăptare')) {
+      return <Ionicons name="heart" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
+    }
+    if (cleanType === 'milk' || cleanType === 'lapte') {
+      return <FontAwesome5 name="wine-bottle" size={15} color="#D35400" style={{ marginRight: 8 }} />;
+    }
+    if (cleanType === 'growth' || cleanType === 'crestere') {
+      return <MaterialCommunityIcons name="ruler" size={17} color="#27AE60" style={{ marginRight: 8 }} />;
+    }
+    if (cleanType === 'mama' || cleanType === 'alaptare') {
+      return <Ionicons name="woman-outline" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
+    }
+    return <Ionicons name="moon-outline" size={17} color="#2980B9" style={{ marginRight: 8 }} />;
+  };
 
   const renderDiversificationDetails = (item) => {
     const reaction = item?.reaction || item?.allergenStatus || 'Fără reacții';
@@ -232,33 +247,67 @@ export default function HistorySection({
 
   const calculateDayStats = (entries, dateStr, todayStr) => {
     let totalMilk = 0;
-    let totalSleepMinutes = 0;
+    const sleepIntervals = [];
 
-    if (!entries || !Array.isArray(entries)) {
-      return { totalMilk: 0, sleepHours: '0.0', awakeHours: '0.0' };
-    }
+    const isToday = dateStr === 'Astăzi' || dateStr === todayStr;
+    const now = new Date();
+    const currentDayMinutes = now.getHours() * 60 + now.getMinutes();
+    const maxDayMinute = isToday ? currentDayMinutes : 24 * 60;
 
-    entries.forEach((item) => {
-      const type = String(item?.type || '').toLowerCase();
-      const val = String(item?.value || '');
-
-      if (type === 'milk' || type === 'lapte' || type === 'alaptare' || val.toLowerCase().includes('sân')) {
-        const mlMatch = val.match(/(\d+)\s*ml/i);
-        if (mlMatch) {
-          totalMilk += parseInt(mlMatch[1], 10);
-        }
+    const clampInterval = (start, end) => {
+      if (start === null || end === null) return;
+      const s = Math.max(0, Math.min(maxDayMinute, start));
+      const e = Math.max(0, Math.min(maxDayMinute, end));
+      if (e > s) {
+        sleepIntervals.push([s, e]);
       }
+    };
 
-      if (type === 'sleep') {
-        const durationSource = item.customDurationLabel || '';
-        const hMatch = durationSource.match(/(\d+)\s*h/i);
-        const mMatch = durationSource.match(/(\d+)\s*m/i);
+    if (entries && Array.isArray(entries)) {
+      entries.forEach((item) => {
+        const type = String(item?.type || '').toLowerCase();
+        const val = String(item?.value || '');
 
-        if (hMatch || mMatch) {
-          const hours = hMatch ? parseInt(hMatch[1], 10) : 0;
-          const mins = mMatch ? parseInt(mMatch[1], 10) : 0;
-          totalSleepMinutes += (hours * 60) + mins;
-        } else if (!item.displayPart || item.displayPart === 'full' || item.displayPart === 'second') {
+        if (
+          type === 'milk' ||
+          type === 'lapte' ||
+          type === 'alaptare' ||
+          val.toLowerCase().includes('sân')
+        ) {
+          const mlMatch = val.match(/(\d+)\s*ml/i);
+          if (mlMatch) {
+            totalMilk += parseInt(mlMatch[1], 10);
+          }
+        }
+
+        if (type === 'sleep') {
+          const valLower = val.toLowerCase();
+          const isActive =
+            valLower.includes('adormit la') && !valLower.includes('trezit la');
+
+          if (isActive) {
+            const activeMatch = val.match(/Adormit la\s+([\d:A-Za-z\s]+?)$/i);
+            const startMin = activeMatch ? parseTimeToMinutes(activeMatch[1].trim()) : null;
+            if (startMin !== null && isToday) {
+              clampInterval(startMin, currentDayMinutes);
+            }
+            return;
+          }
+
+          if (item?.displayPart === 'second') {
+            const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
+            const endMin = wakeMatch ? parseTimeToMinutes(wakeMatch[1].trim()) : null;
+            clampInterval(0, endMin);
+            return;
+          }
+
+          if (item?.displayPart === 'first') {
+            const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s]+?)(?=\s*-|\s*Trezit|$)/i);
+            const startMin = sleepMatch ? parseTimeToMinutes(sleepMatch[1].trim()) : null;
+            clampInterval(startMin, 24 * 60);
+            return;
+          }
+
           const sleepMatch = val.match(/Adormit la\s+([\d:A-Za-z\s]+?)(?=\s*-|\s*Trezit|$)/i);
           const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
 
@@ -266,34 +315,47 @@ export default function HistorySection({
             const startMin = parseTimeToMinutes(sleepMatch[1].trim());
             const endMin = parseTimeToMinutes(wakeMatch[1].trim());
             if (startMin !== null && endMin !== null) {
-              let diff = endMin - startMin;
-              if (diff > 0) totalSleepMinutes += diff;
+              if (endMin < startMin) {
+                clampInterval(startMin, 24 * 60);
+                clampInterval(0, endMin);
+              } else {
+                clampInterval(startMin, endMin);
+              }
             }
           }
         }
-      }
-    });
-
-    const sleepHoursNum = totalSleepMinutes / 60;
-    const isToday = (dateStr === 'Astăzi' || dateStr === todayStr);
-
-    let awakeHoursNum = 0;
-    let effectiveSleepHoursNum = sleepHoursNum;
-
-    if (isToday) {
-      const now = new Date();
-      const currentDayMinutes = now.getHours() * 60 + now.getMinutes();
-      const elapsedHoursNum = currentDayMinutes / 60;
-
-      effectiveSleepHoursNum = Math.min(sleepHoursNum, Math.max(0, elapsedHoursNum));
-      awakeHoursNum = Math.max(0, elapsedHoursNum - effectiveSleepHoursNum);
-    } else {
-      effectiveSleepHoursNum = Math.min(24.0, sleepHoursNum);
-      awakeHoursNum = Math.max(0.0, 24.0 - effectiveSleepHoursNum);
+      });
     }
 
-    const sleepHours = effectiveSleepHoursNum.toFixed(1);
-    const awakeHours = awakeHoursNum.toFixed(1);
+    sleepIntervals.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const [s, e] of sleepIntervals) {
+      if (!merged.length || s > merged[merged.length - 1][1]) {
+        merged.push([s, e]);
+      } else {
+        merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], e);
+      }
+    }
+
+    let totalSleepMinutes = 0;
+    for (const [s, e] of merged) {
+      totalSleepMinutes += e - s;
+    }
+
+    let totalAwakeMinutes = 0;
+    let cursor = 0;
+    for (const [s, e] of merged) {
+      if (s > cursor) {
+        totalAwakeMinutes += Math.min(s, maxDayMinute) - cursor;
+      }
+      cursor = Math.max(cursor, e);
+    }
+    if (cursor < maxDayMinute) {
+      totalAwakeMinutes += maxDayMinute - cursor;
+    }
+
+    const sleepHours = (totalSleepMinutes / 60).toFixed(1);
+    const awakeHours = (totalAwakeMinutes / 60).toFixed(1);
 
     return { totalMilk, sleepHours, awakeHours };
   };
@@ -320,18 +382,25 @@ export default function HistorySection({
         const isBreastFeedingEntry = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
         const isMilkFeeding = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeedingEntry;
         const isDiversificationEntry = type === 'diversification' || type === 'food' || type === 'solid';
+        const isSleepEntry = type === 'sleep' || type === 'somn';
 
-        if (type === 'sleep') {
-          const splitParts = getSplitSleepParts(item, dateStr);
-          if (splitParts.length > 1) {
-            expandedGroupedEntries[dateStr].push(splitParts[0]);
-            const nextDay = splitParts[1].targetDate;
-            if (nextDay) {
-              if (!expandedGroupedEntries[nextDay]) expandedGroupedEntries[nextDay] = [];
-              expandedGroupedEntries[nextDay].push(splitParts[1]);
-            }
-          } else {
+        if (filterType === 'diversification') {
+          if (isDivEnabled && isDiversificationEntry) {
             expandedGroupedEntries[dateStr].push(item);
+          }
+        } else if (isSleepEntry) {
+          if (filterType === 'all' || filterType === 'sleep' || filterType === 'somn') {
+            const splitParts = getSplitSleepParts(item, dateStr);
+            if (splitParts.length > 1) {
+              expandedGroupedEntries[dateStr].push(splitParts[0]);
+              const nextDay = splitParts[1].targetDate;
+              if (nextDay) {
+                if (!expandedGroupedEntries[nextDay]) expandedGroupedEntries[nextDay] = [];
+                expandedGroupedEntries[nextDay].push(splitParts[1]);
+              }
+            } else {
+              expandedGroupedEntries[dateStr].push(item);
+            }
           }
         } else if (filterType === 'all') {
           expandedGroupedEntries[dateStr].push(item);
@@ -341,10 +410,6 @@ export default function HistorySection({
           }
         } else if (filterType === 'milk') {
           if (isMilkFeeding) {
-            expandedGroupedEntries[dateStr].push(item);
-          }
-        } else if (filterType === 'diversification') {
-          if (isDiversificationEntry) {
             expandedGroupedEntries[dateStr].push(item);
           }
         } else if (type === filterType) {
@@ -425,9 +490,11 @@ export default function HistorySection({
         <TouchableOpacity style={[styles.filterIconChip, filterType === 'sleep' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'sleep' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('sleep')}>
           <Ionicons name="moon-outline" size={17} color={filterType === 'sleep' ? '#FFF' : '#2980B9'} />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterIconChip, filterType === 'diversification' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'diversification' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('diversification')}>
-          <Ionicons name="restaurant" size={17} color={filterType === 'diversification' ? '#FFF' : '#E67E22'} />
-        </TouchableOpacity>
+        {isDivEnabled && (
+          <TouchableOpacity style={[styles.filterIconChip, filterType === 'diversification' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'diversification' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('diversification')}>
+            <Ionicons name="restaurant" size={17} color={filterType === 'diversification' ? '#FFF' : '#E67E22'} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'growth' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('growth')}>
           <MaterialCommunityIcons name="ruler" size={17} color={filterType === 'growth' ? '#FFF' : '#27AE60'} />
         </TouchableOpacity>
@@ -555,11 +622,11 @@ const styles = StyleSheet.create({
   filterIconChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center', flex: 1, marginHorizontal: 2 },
   filterIconChipActive: { borderColor: '#D35400' },
   dayGroupContainer: { marginBottom: 8 },
-  dayHeaderRow: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, marginBottom: 4 }, // 👈 Redus padding vertical
+  dayHeaderRow: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, borderWidth: 1, marginBottom: 4 },
   dayHeaderTitle: { fontWeight: '700' },
   dayStatText: { fontWeight: '700' },
   historyList: { flex: 1, marginTop: 2 },
-  historyItemCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, marginBottom: 4 }, // 👈 Redus padding vertical și marjă
+  historyItemCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, marginBottom: 4 },
   historyType: { fontWeight: '700', marginBottom: 0 },
   historyDateTime: { fontWeight: '500' },
   growthSubText: { fontWeight: '600', color: '#27AE60', marginTop: 1 },

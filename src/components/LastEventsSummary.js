@@ -8,14 +8,10 @@ export default function LastEventsSummary({
   todayStr,
   currentTheme,
 }) {
-  const parseEntryDateTime = (dateStr, timeStr) => {
+  const parseTimeParts = (timeStr) => {
     if (!timeStr) return null;
-
-    let targetDateStr = dateStr === 'Astăzi' || !dateStr ? todayStr : dateStr;
-
     const cleanTimeStr = String(timeStr).replace(/'/g, '').trim();
     const match = cleanTimeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-
     if (!match) return null;
 
     let hours = parseInt(match[1], 10);
@@ -25,10 +21,40 @@ export default function LastEventsSummary({
     if (ampm === 'PM' && hours < 12) hours += 12;
     if (ampm === 'AM' && hours === 12) hours = 0;
 
-    const [year, month, day] = targetDateStr.split('-').map(Number);
-    if (!year || !month || !day) return new Date();
+    return { hours, minutes };
+  };
 
-    return new Date(year, month - 1, day, hours, minutes, 0);
+  const parseEntryDateTime = (dateStr, timeStr) => {
+    const parts = parseTimeParts(timeStr);
+    if (!parts) return null;
+
+    const targetDateStr =
+      !dateStr || dateStr === 'Astăzi' ? todayStr : String(dateStr).trim();
+    const dateMatch = targetDateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (dateMatch) {
+      const year = parseInt(dateMatch[1], 10);
+      const month = parseInt(dateMatch[2], 10);
+      const day = parseInt(dateMatch[3], 10);
+      return new Date(year, month - 1, day, parts.hours, parts.minutes, 0, 0);
+    }
+
+    const fallback = new Date(targetDateStr);
+    if (!isNaN(fallback.getTime())) {
+      fallback.setHours(parts.hours, parts.minutes, 0, 0);
+      return fallback;
+    }
+
+    const now = new Date();
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      parts.hours,
+      parts.minutes,
+      0,
+      0
+    );
   };
 
   const getTimeElapsedText = (targetDate) => {
@@ -49,86 +75,182 @@ export default function LastEventsSummary({
   };
 
   const calculateTimeElapsedForEvents = () => {
-    let lastMilkElapsed = null;
-    let lastSleepElapsed = null;
-    let isCurrentlySleeping = false;
+    let latestMilkDate = null;
+    let latestWakeDate = null;
+    let latestActiveSleepStartDate = null;
 
     if (!sortedDates || sortedDates.length === 0 || !groupedEntries) {
-      return { lastMilkElapsed, lastSleepElapsed, isCurrentlySleeping };
+      return {
+        lastMilkElapsed: null,
+        lastSleepElapsed: null,
+        activeSleepElapsed: null,
+        isCurrentlySleeping: false,
+      };
     }
-
-    let checkedFirstSleep = false;
-    let foundMilk = false;
-    let foundSleep = false;
 
     for (const dateStr of sortedDates) {
       const dayEntries = groupedEntries[dateStr] || [];
+      const effectiveDateStr = itemDateFallback(dateStr, todayStr);
+
       for (const item of dayEntries) {
         const type = String(item?.type || '').toLowerCase();
-        const val = String(item?.value || '').toLowerCase();
+        const val = String(item?.value || '');
+        const valLower = val.toLowerCase();
 
-        const isBreastFeeding = val.includes('sân') || val.includes('sâni') || val.includes('alăptare');
-        const isMilk = type === 'milk' || type === 'lapte' || type === 'mama' || type === 'alaptare' || isBreastFeeding;
+        const isBreastFeeding =
+          valLower.includes('sân') ||
+          valLower.includes('sâni') ||
+          valLower.includes('alăptare');
+        const isMilk =
+          type === 'milk' ||
+          type === 'lapte' ||
+          type === 'mama' ||
+          type === 'alaptare' ||
+          isBreastFeeding;
 
-        // Caută prima masă
-        if (!foundMilk && isMilk) {
-          const eventDate = parseEntryDateTime(dateStr === todayStr ? todayStr : dateStr, item.time);
-          lastMilkElapsed = getTimeElapsedText(eventDate);
-          foundMilk = true;
+        if (isMilk) {
+          const itemDateStr = item?.date || effectiveDateStr;
+          const milkDate = parseEntryDateTime(itemDateStr, item?.time);
+          if (
+            milkDate &&
+            !isNaN(milkDate.getTime()) &&
+            (!latestMilkDate || milkDate > latestMilkDate)
+          ) {
+            latestMilkDate = milkDate;
+          }
         }
 
-        // Caută primul somn
-        if (!foundSleep && type === 'sleep') {
-          if (!checkedFirstSleep) {
-            checkedFirstSleep = true;
-            const isSleepingNow = val.includes('adormit la') && !val.includes('trezit la');
-            if (isSleepingNow) {
-              isCurrentlySleeping = true;
+        if (type === 'sleep') {
+          const itemDateStr = item?.date || effectiveDateStr;
+          const isSleepingNow =
+            valLower.includes('adormit la') && !valLower.includes('trezit la');
+
+          if (isSleepingNow) {
+            const sleepOnlyMatch = val.match(/Adormit la\s+([\d:A-Za-z\s]+?)$/i);
+            const startTimeStr = sleepOnlyMatch
+              ? sleepOnlyMatch[1].trim()
+              : item?.time;
+            let startDate = parseEntryDateTime(itemDateStr, startTimeStr);
+
+            // Dacă ora de adormire pare să fie din seara precedentă (ex. ora curentă e 02:00 și a adormit la 22:30)
+            if (startDate && !isNaN(startDate.getTime()) && startDate > new Date()) {
+              startDate = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
+            }
+
+            if (
+              startDate &&
+              !isNaN(startDate.getTime()) &&
+              (!latestActiveSleepStartDate ||
+                startDate > latestActiveSleepStartDate)
+            ) {
+              latestActiveSleepStartDate = startDate;
+            }
+          } else {
+            const sleepMatch = val.match(
+              /Adormit la\s+([\d:A-Za-z\s]+?)(?=\s*-|\s*Trezit|$)/i
+            );
+            const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
+
+            const startDate = sleepMatch
+              ? parseEntryDateTime(itemDateStr, sleepMatch[1].trim())
+              : null;
+            let wakeDate = wakeMatch
+              ? parseEntryDateTime(itemDateStr, wakeMatch[1].trim())
+              : parseEntryDateTime(itemDateStr, item?.time);
+
+            // Dacă ora de trezire este înaintea orei de adormire, somnul a trecut de miezul nopții
+            if (startDate && wakeDate && wakeDate < startDate) {
+              wakeDate = new Date(wakeDate.getTime() + 24 * 60 * 60 * 1000);
+            }
+
+            if (
+              wakeDate &&
+              !isNaN(wakeDate.getTime()) &&
+              (!latestWakeDate || wakeDate > latestWakeDate)
+            ) {
+              latestWakeDate = wakeDate;
             }
           }
-
-          const isSleepingNowItem = val.includes('adormit la') && !val.includes('trezit la');
-
-          if (!isSleepingNowItem) {
-            const wakeMatch = val.match(/Trezit la\s+([\d:A-Za-z\s]+?)(?=\s*-|$)/i);
-            const timeToUse = wakeMatch ? wakeMatch[1].trim() : item.time;
-            const eventDate = parseEntryDateTime(dateStr === todayStr ? todayStr : dateStr, timeToUse);
-            lastSleepElapsed = getTimeElapsedText(eventDate);
-            foundSleep = true;
-          } else if (!foundSleep && checkedFirstSleep && sortedDates.indexOf(dateStr) === sortedDates.length - 1 && dayEntries.indexOf(item) === dayEntries.length - 1) {
-            foundSleep = true;
-          }
         }
-
-        if (foundMilk && foundSleep) break;
       }
-      if (foundMilk && foundSleep) break;
     }
 
-    return { lastMilkElapsed, lastSleepElapsed, isCurrentlySleeping };
+    // Bebelușul doarme în prezent doar dacă ultimul somn activ este mai recent decât ultima trezire
+    const isCurrentlySleeping =
+      latestActiveSleepStartDate !== null &&
+      (!latestWakeDate || latestActiveSleepStartDate >= latestWakeDate);
+
+    return {
+      lastMilkElapsed: getTimeElapsedText(latestMilkDate),
+      lastSleepElapsed: getTimeElapsedText(latestWakeDate),
+      activeSleepElapsed: isCurrentlySleeping
+        ? getTimeElapsedText(latestActiveSleepStartDate)
+        : null,
+      isCurrentlySleeping,
+    };
   };
 
-  const { lastMilkElapsed, lastSleepElapsed, isCurrentlySleeping } = calculateTimeElapsedForEvents();
+  function itemDateFallback(dateStr, todayStr) {
+    return !dateStr || dateStr === 'Astăzi' ? todayStr : dateStr;
+  }
+
+  const {
+    lastMilkElapsed,
+    lastSleepElapsed,
+    activeSleepElapsed,
+    isCurrentlySleeping,
+  } = calculateTimeElapsedForEvents();
+
+  const sleepingDisplayText = isCurrentlySleeping
+    ? activeSleepElapsed
+      ? `Doarme • ${activeSleepElapsed.replace(/^Acum\s+/i, '')}`
+      : 'Doarme'
+    : lastSleepElapsed || 'Niciunul';
 
   return (
-    <View style={[styles.card, { backgroundColor: currentTheme.inputBackground, borderColor: currentTheme.border }]}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: currentTheme.inputBackground,
+          borderColor: currentTheme.border,
+        },
+      ]}
+    >
       {/* Secțiunea Masă */}
       <View style={styles.statusItem}>
         <View style={styles.headerRow}>
-          <FontAwesome5 name="wine-bottle" size={12} color="#D35400" style={{ marginRight: 4 }} />
-          <Text style={[styles.statusLabel, { color: currentTheme.textSub }]}>Timp de la masă</Text>
+          <FontAwesome5
+            name="wine-bottle"
+            size={12}
+            color="#D35400"
+            style={{ marginRight: 4 }}
+          />
+          <Text style={[styles.statusLabel, { color: currentTheme.textSub }]}>
+            Timp de la masă
+          </Text>
         </View>
-        <Text style={[styles.statusValue, { color: currentTheme.textMain }]} numberOfLines={1}>
+        <Text
+          style={[styles.statusValue, { color: currentTheme.textMain }]}
+          numberOfLines={1}
+        >
           {lastMilkElapsed || 'Niciuna'}
         </Text>
       </View>
 
-      <View style={[styles.statusDivider, { backgroundColor: currentTheme.border }]} />
+      <View
+        style={[styles.statusDivider, { backgroundColor: currentTheme.border }]}
+      />
 
       {/* Secțiunea Somn */}
       <View style={styles.statusItem}>
         <View style={styles.headerRow}>
-          <Ionicons name="moon" size={13} color="#2980B9" style={{ marginRight: 4 }} />
+          <Ionicons
+            name="moon"
+            size={13}
+            color="#2980B9"
+            style={{ marginRight: 4 }}
+          />
           <Text style={[styles.statusLabel, { color: currentTheme.textSub }]}>
             {isCurrentlySleeping ? 'Stare somn' : 'Timp de la somn'}
           </Text>
@@ -137,12 +259,12 @@ export default function LastEventsSummary({
         <Text
           style={[
             styles.statusValue,
-            { color: currentTheme.textMain }, // 💡 Culoare standard (alb / text principal), fără albastru
-            isCurrentlySleeping && { fontSize: 11,   }
+            { color: currentTheme.textMain },
+            isCurrentlySleeping && { fontSize: 11 },
           ]}
           numberOfLines={1}
         >
-          {isCurrentlySleeping ? 'Doarme' : (lastSleepElapsed || 'Niciunul')}
+          {sleepingDisplayText}
         </Text>
       </View>
     </View>
