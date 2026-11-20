@@ -75,13 +75,13 @@ export default function LastEventsSummary({
   };
 
   const calculateTimeElapsedForEvents = () => {
-    let latestMilkDate = null;
+    let latestMealDate = null;
     let latestWakeDate = null;
     let latestActiveSleepStartDate = null;
 
     if (!sortedDates || sortedDates.length === 0 || !groupedEntries) {
       return {
-        lastMilkElapsed: null,
+        lastMealElapsed: null,
         lastSleepElapsed: null,
         activeSleepElapsed: null,
         isCurrentlySleeping: false,
@@ -107,16 +107,18 @@ export default function LastEventsSummary({
           type === 'mama' ||
           type === 'alaptare' ||
           isBreastFeeding;
+        const isSolidFood =
+          type === 'diversification' || type === 'food' || type === 'solid';
 
-        if (isMilk) {
+        if (isMilk || isSolidFood) {
           const itemDateStr = item?.date || effectiveDateStr;
-          const milkDate = parseEntryDateTime(itemDateStr, item?.time);
+          const mealDate = parseEntryDateTime(itemDateStr, item?.time);
           if (
-            milkDate &&
-            !isNaN(milkDate.getTime()) &&
-            (!latestMilkDate || milkDate > latestMilkDate)
+            mealDate &&
+            !isNaN(mealDate.getTime()) &&
+            (!latestMealDate || mealDate > latestMealDate)
           ) {
-            latestMilkDate = milkDate;
+            latestMealDate = mealDate;
           }
         }
 
@@ -181,7 +183,7 @@ export default function LastEventsSummary({
       (!latestWakeDate || latestActiveSleepStartDate >= latestWakeDate);
 
     return {
-      lastMilkElapsed: getTimeElapsedText(latestMilkDate),
+      lastMealElapsed: getTimeElapsedText(latestMealDate),
       lastSleepElapsed: getTimeElapsedText(latestWakeDate),
       activeSleepElapsed: isCurrentlySleeping
         ? getTimeElapsedText(latestActiveSleepStartDate)
@@ -195,7 +197,7 @@ export default function LastEventsSummary({
   }
 
   const {
-    lastMilkElapsed,
+    lastMealElapsed,
     lastSleepElapsed,
     activeSleepElapsed,
     isCurrentlySleeping,
@@ -217,11 +219,11 @@ export default function LastEventsSummary({
         },
       ]}
     >
-      {/* Secțiunea Masă */}
+      {/* Secțiunea Masă (lapte sau mâncare solidă) */}
       <View style={styles.statusItem}>
         <View style={styles.headerRow}>
           <FontAwesome5
-            name="wine-bottle"
+            name="utensils"
             size={12}
             color="#D35400"
             style={{ marginRight: 4 }}
@@ -234,7 +236,7 @@ export default function LastEventsSummary({
           style={[styles.statusValue, { color: currentTheme.textMain }]}
           numberOfLines={1}
         >
-          {lastMilkElapsed || 'Niciuna'}
+          {lastMealElapsed || 'Niciuna'}
         </Text>
       </View>
 

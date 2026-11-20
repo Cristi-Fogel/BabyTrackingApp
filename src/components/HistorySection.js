@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl } 
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { getFontSize, getDiversificationEnabled } from '../services/storage';
+import DiversificationHistoryItem from './DiversificationHistoryItem';
+import FoodHistoryModal from './FoodHistoryModal';
 
 export default function HistorySection({
   currentTheme,
@@ -23,6 +25,7 @@ export default function HistorySection({
 }) {
   const [fontSizeSetting, setFontSizeSetting] = useState('normal');
   const [diversificationLocal, setDiversificationLocal] = useState(false);
+  const [selectedFoodModal, setSelectedFoodModal] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -216,7 +219,7 @@ export default function HistorySection({
       return <Ionicons name="water-outline" size={17} color="#9B59B6" style={{ marginRight: 8 }} />;
     }
     if (cleanType === 'diversification' || cleanType === 'food' || cleanType === 'solid') {
-      return <Ionicons name="restaurant" size={17} color="#E67E22" style={{ marginRight: 8 }} />;
+      return <Ionicons name="nutrition-outline" size={17} color="#E67E22" style={{ marginRight: 8 }} />;
     }
     if (cleanValue.includes('sân') || cleanValue.includes('sâni') || cleanValue.includes('alăptare')) {
       return <Ionicons name="heart" size={17} color="#D81B60" style={{ marginRight: 8 }} />;
@@ -492,7 +495,7 @@ export default function HistorySection({
         </TouchableOpacity>
         {isDivEnabled && (
           <TouchableOpacity style={[styles.filterIconChip, filterType === 'diversification' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'diversification' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('diversification')}>
-            <Ionicons name="restaurant" size={17} color={filterType === 'diversification' ? '#FFF' : '#E67E22'} />
+            <Ionicons name="nutrition-outline" size={17} color={filterType === 'diversification' ? '#FFF' : '#E67E22'} />
           </TouchableOpacity>
         )}
         <TouchableOpacity style={[styles.filterIconChip, filterType === 'growth' && styles.filterIconChipActive, { borderColor: currentTheme.border, backgroundColor: filterType === 'growth' ? '#D35400' : currentTheme.inputBackground }]} onPress={() => setFilterType('growth')}>
@@ -565,6 +568,29 @@ export default function HistorySection({
                       ? (item.customDurationLabel || getSleepDurationText(item?.value))
                       : '';
 
+                    if (isDiversification) {
+                      return (
+                        <DiversificationHistoryItem
+                          key={itemKey}
+                          item={item}
+                          formattedTime={formattedTime}
+                          currentTheme={currentTheme}
+                          dynamicFont={dynamicFont}
+                          onPressDetails={(foodTitle) => setSelectedFoodModal(foodTitle)}
+                          onLongPress={(targetItem) => {
+                            if (onOpenActionModal) {
+                              onOpenActionModal({
+                                ...targetItem,
+                                id: realIdForAction,
+                                date: dateStr,
+                                time: targetItem.time,
+                              });
+                            }
+                          }}
+                        />
+                      );
+                    }
+
                     return (
                       <TouchableOpacity
                         key={itemKey}
@@ -596,7 +622,7 @@ export default function HistorySection({
                         </View>
 
                         <View style={styles.valueRightContainer}>
-                          {isSleep ? renderSleepDetails(item?.value, item) : isDiversification ? renderDiversificationDetails(item) : (
+                          {isSleep ? renderSleepDetails(item?.value, item) : (
                             <Text style={[styles.historyValue, { color: isGrowth ? '#27AE60' : currentTheme.tint, fontSize: dynamicFont.value }]}>
                               {item?.value ? item.value : '-'}
                             </Text>
@@ -610,6 +636,16 @@ export default function HistorySection({
           })
         )}
       </ScrollView>
+
+      <FoodHistoryModal
+        visible={!!selectedFoodModal}
+        foodName={selectedFoodModal}
+        groupedEntries={groupedEntries}
+        todayStr={todayStr}
+        cleanTime={cleanTime}
+        currentTheme={currentTheme}
+        onClose={() => setSelectedFoodModal(null)}
+      />
     </View>
   );
 }
