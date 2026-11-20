@@ -2,7 +2,7 @@
   "expo": {
     "name": "BabyTracks",
     "slug": "BabyTracks",
-    "version": "0.5.2",
+    "version": "0.6.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
